@@ -27,16 +27,25 @@ function calculateDuration(){
 }
 
 function ensureDurationBox(){
+  const careBox=$('care');
+  if(!careBox) return;
+
   let el=$('durationInfo');
   if(!el){
-    el=document.createElement('p');
+    el=document.createElement('div');
     el.id='durationInfo';
     el.className='notice';
-    const date=$('requested_date');
-    if(date) date.parentElement.parentElement.insertAdjacentElement('afterend',el);
+    el.style.display='block';
+    el.style.margin='15px 0';
+    el.style.padding='12px';
+    el.style.fontWeight='500';
+    careBox.insertAdjacentElement('afterend',el);
   }
+
   const d=calculateDuration();
-  el.innerHTML=`<b>Voraussichtliche Bearbeitungsdauer: ${d.label}</b><br>Der Termin wird erst nach Prüfung und Bestätigung durch T.S. Serviceleistungen verbindlich.`;
+  el.innerHTML=
+    `<b>Voraussichtliche Bearbeitungsdauer: ${d.label}</b><br>`+
+    `Der Termin wird erst nach Prüfung und Bestätigung durch T.S. Serviceleistungen verbindlich.`;
 }
 
 async function loadBookedWindows(){
@@ -127,14 +136,15 @@ function pick(s){
   window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
 }
 
-$('requested_date').min=new Date(Date.now()+86400000).toISOString().slice(0,10);
+function initApp(){
+  $('requested_date').min=new Date(Date.now()+86400000).toISOString().slice(0,10);
 
-document.querySelectorAll('input[name=care]').forEach(x=>x.addEventListener('change',ensureDurationBox));
-$('requested_time').addEventListener('change',ensureDurationBox);
-$('requested_date').addEventListener('change',async()=>{ await validateAvailability(); });
-ensureDurationBox();
+  document.querySelectorAll('input[name=care]').forEach(x=>x.addEventListener('change',ensureDurationBox));
+  $('requested_time').addEventListener('change',ensureDurationBox);
+  $('requested_date').addEventListener('change',async()=>{ await validateAvailability(); });
+  ensureDurationBox();
 
-$('form').onsubmit=async e=>{
+  $('form').onsubmit=async e=>{
   e.preventDefault();
   const b=e.submitter;
   b.disabled=true;
@@ -205,3 +215,10 @@ $('form').onsubmit=async e=>{
     b.textContent='Anfrage absenden';
   }
 };
+}
+
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded',initApp);
+}else{
+  initApp();
+}
