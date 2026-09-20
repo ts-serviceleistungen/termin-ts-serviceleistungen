@@ -3,35 +3,60 @@ const db=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
 const $=x=>document.getElementById(x);
 const FUNCTION_URL=`${SUPABASE_URL}/functions/v1/notify-new-request`;
 
-function pick(s){$('service_type').value=s;$('title').textContent=s;$('box').classList.remove('hidden');$('care').classList.toggle('hidden',s!=='Fahrzeugpflege');$('parts').classList.toggle('hidden',s==='Fahrzeugpflege');window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'})}
+function pick(s){
+  $('service_type').value=s;
+  $('title').textContent=s;
+  $('box').classList.remove('hidden');
+  $('care').classList.toggle('hidden',s!=='Fahrzeugpflege');
+  $('parts').classList.toggle('hidden',s==='Fahrzeugpflege');
+  window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
+}
+
 $('requested_date').min=new Date(Date.now()+86400000).toISOString().slice(0,10);
 
 $('form').onsubmit=async e=>{
   e.preventDefault();
-  let b=e.submitter;
+  const b=e.submitter;
   b.disabled=true;
   b.textContent='Wird gesendet …';
+
+  const requestId=crypto.randomUUID();
+
   const d={
-    service_type:$('service_type').value,status:'Neue Anfrage',
-    first_name:$('first_name').value,last_name:$('last_name').value,
-    phone:$('phone').value,email:$('email').value,
-    vehicle_type:$('vehicle_type').value,make:$('make').value,model:$('model').value,
-    color:$('color').value,year:$('year').value?Number($('year').value):null,
+    id:requestId,
+    service_type:$('service_type').value,
+    status:'Neue Anfrage',
+    first_name:$('first_name').value,
+    last_name:$('last_name').value,
+    phone:$('phone').value,
+    email:$('email').value,
+    vehicle_type:$('vehicle_type').value,
+    make:$('make').value,
+    model:$('model').value,
+    color:$('color').value,
+    year:$('year').value?Number($('year').value):null,
     plate:$('plate').value,
     care_options:[...document.querySelectorAll('input[name=care]:checked')].map(x=>x.value),
-    dirt_level:$('dirt_level').value,pet_hair:$('pet_hair').value,
-    details:$('details').value,quantity:Number($('quantity').value)||null,
-    tire_type:$('tire_type').value,requested_date:$('requested_date').value,
-    requested_time:$('requested_time').value,message:$('message').value
+    dirt_level:$('dirt_level').value,
+    pet_hair:$('pet_hair').value,
+    details:$('details').value,
+    quantity:Number($('quantity').value)||null,
+    tire_type:$('tire_type').value,
+    requested_date:$('requested_date').value,
+    requested_time:$('requested_time').value,
+    message:$('message').value,
+    privacy_consent:$('privacy_consent').checked
   };
+
   try{
-    const r=await db.from('requests').insert(d).select('id').single();
+    // Wichtig: Kein .select() nach dem INSERT.
+    // Dadurch benötigt der öffentliche Besucher keine SELECT-RLS-Berechtigung.
+    const r=await db.from('requests').insert(d);
     if(r.error) throw r.error;
 
-    const requestId=r.data.id;
-    const files=[...($('photos').files||[])];
+    const files=[...($('photos')?.files||[])];
 
-    // Fotos sicher im privaten Bucket speichern und mit der Anfrage verknüpfen.
+    // Fotos im privaten Bucket speichern und mit der Anfrage verknüpfen.
     for(const file of files){
       const ext=(file.name.split('.').pop()||'jpg').toLowerCase();
       const safeExt=/^[a-z0-9]+$/.test(ext)?ext:'jpg';
@@ -51,11 +76,13 @@ $('form').onsubmit=async e=>{
       if(photo.error) throw photo.error;
     }
 
-    // E-Mail an T.S. Serviceleistungen. Der Endpoint akzeptiert nur neue Anfragen
-    // und sendet immer an die fest hinterlegte Firmenadresse.
+    // E-Mail an T.S. Serviceleistungen.
     const notify=await fetch(FUNCTION_URL,{
-      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request:{...d,id:requestId}})
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({request:d})
     });
+
     if(!notify.ok){
       console.warn('E-Mail-Benachrichtigung konnte nicht gesendet werden:',await notify.text());
     }
@@ -67,5 +94,7 @@ $('form').onsubmit=async e=>{
     $('msg').textContent='Die Anfrage konnte nicht gesendet werden: '+err.message;
     $('msg').classList.remove('hidden');
   }
-  b.disabled=false;b.textContent='Anfrage absenden'
-}
+
+  b.disabled=false;
+  b.textContent='Anfrage absenden';
+};
