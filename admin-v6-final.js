@@ -122,6 +122,7 @@ function renderRequests() {
         <button data-action="confirm" data-id="${x.id}">Bestätigen</button>
         <button data-action="alternative" data-id="${x.id}">Alternative</button>
         <button data-action="reject" data-id="${x.id}">Ablehnen</button>
+        <button data-action="delete" data-id="${x.id}" style="color:#b00020">Löschen</button>
       </div>
     </div>`;
   }).join('');
@@ -467,6 +468,7 @@ async function openDetails(id) {
     <button class="primary" data-modal-action="confirm">Termin bestätigen</button>
     <button data-modal-action="alternative">Alternativtermin</button>
     <button data-modal-action="reject">Anfrage ablehnen</button>
+    <button data-modal-action="delete" style="color:#b00020">Anfrage löschen</button>
   `;
 
   modal.classList.remove('hidden');
@@ -595,6 +597,44 @@ async function alternativeRequest(id) {
   closeDetails();
 }
 
+async function deleteRequest(id) {
+  const r = requests.find((x) => x.id === id);
+  if (!r) return;
+
+  const customerName = `${r.first_name || ''} ${r.last_name || ''}`.trim() || 'diese Anfrage';
+  if (!confirm(`Soll die Anfrage von ${customerName} wirklich dauerhaft gelöscht werden?\n\nDie Anfrage und zugehörige Daten werden aus der Verwaltung entfernt.`)) return;
+
+  const { data: photos, error: photoQueryError } = await db
+    .from('request_photos')
+    .select('storage_path')
+    .eq('request_id', id);
+
+  if (photoQueryError) {
+    alert('Löschen nicht möglich: Die zugehörigen Fotos konnten nicht geprüft werden.\n\n' + photoQueryError.message);
+    return;
+  }
+
+  const paths = (photos || []).map((p) => p.storage_path).filter(Boolean);
+  if (paths.length) {
+    const { error: storageError } = await db.storage
+      .from('vehicle-photos')
+      .remove(paths);
+    if (storageError) {
+      alert('Löschen nicht möglich: Die zugehörigen Fotos konnten nicht gelöscht werden.\n\n' + storageError.message);
+      return;
+    }
+  }
+
+  const { error } = await db.from('requests').delete().eq('id', id);
+  if (error) {
+    alert('Fehler beim Löschen: ' + error.message);
+    return;
+  }
+
+  if (selectedRequest?.id === id) closeDetails();
+  await load();
+}
+
 loginForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   loginMsg.classList.add('hidden');
@@ -640,6 +680,7 @@ listEl.addEventListener('click', async (e) => {
   if (action === 'confirm') return confirmRequest(id);
   if (action === 'reject') return rejectRequest(id);
   if (action === 'alternative') return alternativeRequest(id);
+  if (action === 'delete') return deleteRequest(id);
 });
 
 detailActions.addEventListener('click', async (e) => {
@@ -650,6 +691,7 @@ detailActions.addEventListener('click', async (e) => {
   if (action === 'confirm') await confirmRequest(selectedRequest.id);
   if (action === 'reject') await rejectRequest(selectedRequest.id);
   if (action === 'alternative') await alternativeRequest(selectedRequest.id);
+  if (action === 'delete') await deleteRequest(selectedRequest.id);
 });
 
 searchFilter.addEventListener('input', renderRequests);
