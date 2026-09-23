@@ -16,6 +16,16 @@ const userEl = document.getElementById('user');
 const newEl = document.getElementById('newc');
 const openEl = document.getElementById('open');
 const todayEl = document.getElementById('today');
+const dashboardHome = document.getElementById('dashboardHome');
+const requestsView = document.getElementById('requestsView');
+const receiptsView = document.getElementById('receiptsView');
+const pageTitle = document.getElementById('pageTitle');
+const dashNew = document.getElementById('dashNew');
+const dashOpen = document.getElementById('dashOpen');
+const dashToday = document.getElementById('dashToday');
+const dashReceiptCount = document.getElementById('dashReceiptCount');
+const dashYearGross = document.getElementById('dashYearGross');
+const dashMonthGross = document.getElementById('dashMonthGross');
 const modal = document.getElementById('detailModal');
 const detailTitle = document.getElementById('detailTitle');
 const detailBody = document.getElementById('detailBody');
@@ -26,8 +36,39 @@ let requests=[];let selectedRequest=null;
 function escapeHtml(value){return String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;')}
 function formatDate(value){if(!value)return '—';const d=new Date(value+'T00:00:00');return Number.isNaN(d.getTime())?value:d.toLocaleDateString('de-DE')}
 function showLoginMessage(message){loginMsg.textContent=message;loginMsg.classList.remove('hidden')}
-async function init(){const {data,error}=await db.auth.getSession();if(error){showLoginMessage(error.message);return}const session=data.session;if(!session){loginEl.classList.remove('hidden');dashEl.classList.add('hidden');return}loginEl.classList.add('hidden');dashEl.classList.remove('hidden');userEl.textContent=session.user.email||'';await load()}
-async function load(){listEl.innerHTML='<p>Aktualisiere Anfragen...</p>';const {data,error}=await db.from('requests').select('*').order('created_at',{ascending:false});if(error){listEl.innerHTML=`<p class="notice">Fehler beim Laden: ${escapeHtml(error.message)}</p>`;return}requests=data||[];newEl.textContent=requests.filter(x=>x.status==='Neue Anfrage').length;openEl.textContent=requests.filter(x=>!['Abgelehnt','Abgeschlossen'].includes(x.status)).length;const today=new Date().toLocaleDateString('sv-SE');todayEl.textContent=requests.filter(x=>x.requested_date===today).length;if(!requests.length){listEl.innerHTML='<p>Keine Anfragen vorhanden.</p>';return}listEl.innerHTML=requests.map(x=>`<div class="row request-row"><div><b>${escapeHtml(x.first_name)} ${escapeHtml(x.last_name)}</b><small>${escapeHtml(x.phone)}<br>${escapeHtml(x.email)}</small></div><div><b>${escapeHtml(x.make)} ${escapeHtml(x.model)}</b><small>${escapeHtml(x.vehicle_type)} · ${escapeHtml(x.color)}</small></div><div><b>${escapeHtml(x.service_type)}</b><small>${formatDate(x.requested_date)} · ${escapeHtml(x.requested_time||'—')}</small></div><div><span class="badge">${escapeHtml(x.status||'Neue Anfrage')}</span><br><button data-action="details" data-id="${x.id}">Details</button><button data-action="confirm" data-id="${x.id}">Bestätigen</button><button data-action="alternative" data-id="${x.id}">Alternative</button><button data-action="reject" data-id="${x.id}">Ablehnen</button><button data-action="delete" data-id="${x.id}">Löschen</button></div></div>`).join('')}
+async function init(){const {data,error}=await db.auth.getSession();if(error){showLoginMessage(error.message);return}const session=data.session;if(!session){loginEl.classList.remove('hidden');dashEl.classList.add('hidden');return}loginEl.classList.add('hidden');dashEl.classList.remove('hidden');userEl.textContent=session.user.email||'';showView('dashboard');await load()}
+async function load(){
+  listEl.innerHTML='<p>Aktualisiere Anfragen...</p>';
+  const {data,error}=await db.from('requests').select('*').order('created_at',{ascending:false});
+  if(error){
+    listEl.innerHTML=`<p class="notice">Fehler beim Laden: ${escapeHtml(error.message)}</p>`;
+    return;
+  }
+  requests=data||[];
+  const newCount=requests.filter(x=>x.status==='Neue Anfrage').length;
+  const openCount=requests.filter(x=>!['Abgelehnt','Abgeschlossen'].includes(x.status)).length;
+  const today=new Date().toLocaleDateString('sv-SE');
+  const todayCount=requests.filter(x=>x.requested_date===today).length;
+
+  newEl.textContent=newCount;
+  openEl.textContent=openCount;
+  todayEl.textContent=todayCount;
+  dashNew.textContent=newCount;
+  dashOpen.textContent=openCount;
+  dashToday.textContent=todayCount;
+
+  // Belege werden in einem späteren Schritt an dieselbe Oberfläche angebunden.
+  dashReceiptCount.textContent='0';
+  dashYearGross.textContent='0,00 €';
+  dashMonthGross.textContent='0,00 €';
+
+  if(!requests.length){
+    listEl.innerHTML='<p>Keine Anfragen vorhanden.</p>';
+    return;
+  }
+
+  listEl.innerHTML=requests.map(x=>`<div class="row request-row"><div><b>${escapeHtml(x.first_name)} ${escapeHtml(x.last_name)}</b><small>${escapeHtml(x.phone)}<br>${escapeHtml(x.email)}</small></div><div><b>${escapeHtml(x.make)} ${escapeHtml(x.model)}</b><small>${escapeHtml(x.vehicle_type)} · ${escapeHtml(x.color)}</small></div><div><b>${escapeHtml(x.service_type)}</b><small>${formatDate(x.requested_date)} · ${escapeHtml(x.requested_time||'—')}</small></div><div><span class="badge">${escapeHtml(x.status||'Neue Anfrage')}</span><br><button data-action="details" data-id="${x.id}">Details</button><button data-action="confirm" data-id="${x.id}">Bestätigen</button><button data-action="alternative" data-id="${x.id}">Alternative</button><button data-action="reject" data-id="${x.id}">Ablehnen</button><button data-action="delete" data-id="${x.id}">Löschen</button></div></div>`).join('');
+}
 function field(label,value){return `<div class="detail-field"><small>${escapeHtml(label)}</small><div>${escapeHtml(value||'—')}</div></div>`}
 function arrayValue(value){return Array.isArray(value)&&value.length?value.join(', '):'—'}
 async function openDetails(id){selectedRequest=requests.find(x=>x.id===id);if(!selectedRequest)return;const x=selectedRequest;detailTitle.textContent=`${x.first_name||''} ${x.last_name||''}`.trim()||'Anfrage';detailBody.innerHTML=`<div class="detail-grid">${field('Status',x.status)}${field('Leistung',x.service_type)}${field('Wunschdatum',formatDate(x.requested_date))}${field('Wunschzeit',x.requested_time)}${field('Vorname',x.first_name)}${field('Nachname',x.last_name)}${field('Telefon',x.phone)}${field('E-Mail',x.email)}${field('Fahrzeugart',x.vehicle_type)}${field('Hersteller',x.make)}${field('Modell / Typ',x.model)}${field('Farbe',x.color)}${field('Baujahr',x.year)}${field('Kennzeichen',x.plate)}${field('Verschmutzungsgrad',x.dirt_level)}${field('Tierhaare',x.pet_hair)}${field('Menge',x.quantity)}${field('Reifentyp',x.tire_type)}${field('Gewünschte Leistungen',arrayValue(x.care_options))}</div><div class="detail-text">${field('Details / Nachricht',x.details||x.message)}</div><div id="photoGallery" class="photo-gallery"><p>Fotos werden geladen...</p></div>`;detailActions.innerHTML='<button class="primary" data-modal-action="confirm">Termin bestätigen</button><button data-modal-action="alternative">Alternativtermin</button><button data-modal-action="reject">Anfrage ablehnen</button><button data-modal-action="delete">Löschen</button>';modal.classList.remove('hidden');await loadRequestPhotos(x.id)}
@@ -91,6 +132,25 @@ async function deleteRequest(id){
     alert('Die Anfrage konnte nicht gelöscht werden.\n\n'+err.message);
   }
 }
+function showView(view){
+  dashboardHome.classList.toggle('hidden',view!=='dashboard');
+  requestsView.classList.toggle('hidden',view!=='requests');
+  receiptsView.classList.toggle('hidden',view!=='receipts');
+
+  if(view==='dashboard')pageTitle.textContent='Dashboard';
+  if(view==='requests')pageTitle.textContent='Terminanfragen';
+  if(view==='receipts')pageTitle.textContent='Belege';
+
+  if(view==='requests')load();
+}
+
+document.querySelectorAll('[data-nav]').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    showView(btn.dataset.nav);
+    window.scrollTo({top:0,behavior:'smooth'});
+  });
+});
+
 loginForm.addEventListener('submit',async e=>{e.preventDefault();loginMsg.classList.add('hidden');const {error}=await db.auth.signInWithPassword({email:emailEl.value.trim(),password:passwordEl.value});if(error){showLoginMessage(error.message);return}await init()});
 listEl.addEventListener('click',async e=>{const button=e.target.closest('button[data-action]');if(!button)return;const id=button.dataset.id;const action=button.dataset.action;if(action==='details')return openDetails(id);if(action==='confirm')return confirmRequest(id);if(action==='reject')return rejectRequest(id);if(action==='alternative')return alternativeRequest(id);if(action==='delete')return deleteRequest(id)});
 detailActions.addEventListener('click',async e=>{const button=e.target.closest('button[data-modal-action]');if(!button||!selectedRequest)return;const action=button.dataset.modalAction;if(action==='confirm')await confirmRequest(selectedRequest.id);if(action==='reject')await rejectRequest(selectedRequest.id);if(action==='alternative')await alternativeRequest(selectedRequest.id);if(action==='delete')await deleteRequest(selectedRequest.id)});

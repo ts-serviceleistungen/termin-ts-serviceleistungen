@@ -26,19 +26,59 @@
 
   <section id="dash" class="hidden">
     <div class="title">
-      <div><small>VERWALTUNG</small><h1>Terminanfragen</h1></div>
+      <div><small>VERWALTUNG</small><h1 id="pageTitle">Dashboard</h1></div>
       <button id="refresh" class="primary">Aktualisieren</button>
     </div>
 
-    <div class="stats">
-      <div><b id="newc">0</b><small>Neue</small></div>
-      <div><b id="open">0</b><small>Offen</small></div>
-      <div><b id="today">0</b><small>Heute</small></div>
-    </div>
+    <nav id="adminNav" style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px">
+      <button type="button" class="primary" data-nav="dashboard">Dashboard</button>
+      <button type="button" data-nav="requests">Terminanfragen</button>
+      <button type="button" data-nav="receipts">Belege</button>
+      <a href="https://ts-serviceleistungen.github.io/ts-kalender/" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;padding:8px 14px;border:1px solid #ccc;border-radius:8px;text-decoration:none;color:inherit;background:#fff">TS-Kalender</a>
+    </nav>
 
-    <section class="panel">
-      <div class="head"><b>Anfragen</b><span id="user"></span></div>
-      <div id="list"></div>
+    <section id="dashboardHome">
+      <div class="stats">
+        <div><b id="dashNew">0</b><small>Neue Terminanfragen</small></div>
+        <div><b id="dashOpen">0</b><small>Offene Terminanfragen</small></div>
+        <div><b id="dashToday">0</b><small>Termine heute</small></div>
+      </div>
+
+      <div class="stats" style="margin-top:16px">
+        <div><b id="dashReceiptCount">0</b><small>Belege gesamt</small></div>
+        <div><b id="dashYearGross">0,00 €</b><small>Ausgaben dieses Jahr · brutto</small></div>
+        <div><b id="dashMonthGross">0,00 €</b><small>Ausgaben diesen Monat · brutto</small></div>
+      </div>
+
+      <section class="panel" style="margin-top:20px">
+        <div class="head"><b>Schnellzugriff</b><span id="user"></span></div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px">
+          <button type="button" class="primary" data-nav="requests">Terminanfragen öffnen</button>
+          <button type="button" data-nav="receipts">Belege öffnen</button>
+          <a href="https://ts-serviceleistungen.github.io/ts-kalender/" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;padding:8px 14px;border:1px solid #ccc;border-radius:8px;text-decoration:none;color:inherit;background:#fff">TS-Kalender öffnen</a>
+        </div>
+      </section>
+    </section>
+
+    <section id="requestsView" class="hidden">
+      <div class="stats">
+        <div><b id="newc">0</b><small>Neue</small></div>
+        <div><b id="open">0</b><small>Offen</small></div>
+        <div><b id="today">0</b><small>Heute</small></div>
+      </div>
+
+      <section class="panel">
+        <div class="head"><b>Anfragen</b><span></span></div>
+        <div id="list"></div>
+      </section>
+    </section>
+
+    <section id="receiptsView" class="hidden">
+      <section class="panel">
+        <div class="head"><b>Belege</b></div>
+        <p>Die Belegverwaltung wird als nächster Bereich eingebaut.</p>
+        <p><b>Geplant:</b> Beleg fotografieren, automatische Erkennung, Bruttobetrag, Originalbeleg, dauerhaftes Archiv und Google-Sheets-Übertragung.</p>
+      </section>
     </section>
   </section>
 </main>
@@ -56,6 +96,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
-<script src="admin.js?v=delete1"></script>
+<script src="admin.js?v=dashboard1"></script>
 </body>
 </html>
