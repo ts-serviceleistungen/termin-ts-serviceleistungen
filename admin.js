@@ -36,6 +36,8 @@ const receiptCategory = document.getElementById('receiptCategory');
 const receiptDescription = document.getElementById('receiptDescription');
 const receiptPayment = document.getElementById('receiptPayment');
 const receiptMsg = document.getElementById('receiptMsg');
+const ocrReceiptBtn = document.getElementById('ocrReceipt');
+const ocrMsg = document.getElementById('ocrMsg');
 const receiptList = document.getElementById('receiptList');
 
 const modal = document.getElementById('detailModal');
@@ -198,6 +200,72 @@ async function loadReceipts(){
     </div>`).join('');
 }
 
+
+function showOcrMsg(message,error=false){
+  ocrMsg.textContent=message;
+  ocrMsg.classList.remove('hidden');
+  ocrMsg.style.color=error?'#b00020':'';
+}
+
+function fileToDataUrl(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(reader.result);
+    reader.onerror=()=>reject(reader.error||new Error('Datei konnte nicht gelesen werden.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function recognizeReceipt(){
+  const file=receiptImage.files?.[0];
+  if(!file){
+    showOcrMsg('Bitte zuerst ein Belegfoto auswählen.',true);
+    return;
+  }
+
+  if(!file.type.startsWith('image/')){
+    showOcrMsg('Bitte ein Bild als Beleg auswählen.',true);
+    return;
+  }
+
+  ocrReceiptBtn.disabled=true;
+  ocrReceiptBtn.textContent='🔎 Beleg wird erkannt…';
+  showOcrMsg('Beleg wird analysiert. Bitte einen Moment warten…');
+
+  try{
+    const dataUrl=await fileToDataUrl(file);
+    const {data:{session}}=await db.auth.getSession();
+    if(!session)throw new Error('Deine Anmeldung ist abgelaufen. Bitte erneut anmelden.');
+
+    const response=await fetch(`${window.SUPABASE_URL}/functions/v1/ocr-receipt`,{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':`Bearer ${session.access_token}`
+      },
+      body:JSON.stringify({image:dataUrl})
+    });
+
+    const result=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(result.error||'Die Belegerkennung ist fehlgeschlagen.');
+
+    if(result.receipt_date)receiptDate.value=result.receipt_date;
+    if(result.merchant)receiptMerchant.value=result.merchant;
+    if(result.receipt_number)receiptNumber.value=result.receipt_number;
+    if(result.gross_amount!==null && result.gross_amount!==undefined)receiptGross.value=Number(result.gross_amount).toFixed(2);
+    if(result.category)receiptCategory.value=result.category;
+    if(result.description)receiptDescription.value=result.description;
+    if(result.payment_method)receiptPayment.value=result.payment_method;
+
+    showOcrMsg('Erkennung abgeschlossen. Bitte die Daten kontrollieren – besonders den Bruttobetrag – und anschließend speichern.');
+  }catch(err){
+    showOcrMsg(err.message,true);
+  }finally{
+    ocrReceiptBtn.disabled=false;
+    ocrReceiptBtn.textContent='🔎 Beleg automatisch erkennen';
+  }
+}
+
 async function saveReceipt(){
   const file=receiptImage.files?.[0];
   if(!file){
@@ -295,6 +363,8 @@ document.querySelectorAll('[data-nav]').forEach(btn=>{
 });
 
 
+ocrReceiptBtn.addEventListener('click',recognizeReceipt);
+
 receiptForm.addEventListener('submit',async e=>{
   e.preventDefault();
   await saveReceipt();
@@ -309,4 +379,4 @@ receiptList.addEventListener('click',async e=>{
 loginForm.addEventListener('submit',async e=>{e.preventDefault();loginMsg.classList.add('hidden');const {error}=await db.auth.signInWithPassword({email:emailEl.value.trim(),password:passwordEl.value});if(error){showLoginMessage(error.message);return}await init()});
 listEl.addEventListener('click',async e=>{const button=e.target.closest('button[data-action]');if(!button)return;const id=button.dataset.id;const action=button.dataset.action;if(action==='details')return openDetails(id);if(action==='confirm')return confirmRequest(id);if(action==='reject')return rejectRequest(id);if(action==='alternative')return alternativeRequest(id);if(action==='delete')return deleteRequest(id)});
 detailActions.addEventListener('click',async e=>{const button=e.target.closest('button[data-modal-action]');if(!button||!selectedRequest)return;const action=button.dataset.modalAction;if(action==='confirm')await confirmRequest(selectedRequest.id);if(action==='reject')await rejectRequest(selectedRequest.id);if(action==='alternative')await alternativeRequest(selectedRequest.id);if(action==='delete')await deleteRequest(selectedRequest.id)});
-closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',load);init();
+closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',async()=>{await load();await loadReceipts()});init();

@@ -81,6 +81,10 @@
           <label>Belegfoto
             <input id="receiptImage" type="file" accept="image/*" capture="environment" required>
           </label>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button type="button" id="ocrReceipt" class="primary">🔎 Beleg automatisch erkennen</button>
+          </div>
+          <p id="ocrMsg" class="notice hidden"></p>
           <label>Datum
             <input id="receiptDate" type="date" required>
           </label>
@@ -140,6 +144,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
-<script src="admin.js?v=receipts1"></script>
+<script src="admin.js?v=ocr1"></script>
 </body>
 </html>
