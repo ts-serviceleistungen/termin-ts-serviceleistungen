@@ -26,6 +26,18 @@ const dashToday = document.getElementById('dashToday');
 const dashReceiptCount = document.getElementById('dashReceiptCount');
 const dashYearGross = document.getElementById('dashYearGross');
 const dashMonthGross = document.getElementById('dashMonthGross');
+const receiptForm = document.getElementById('receiptForm');
+const receiptImage = document.getElementById('receiptImage');
+const receiptDate = document.getElementById('receiptDate');
+const receiptMerchant = document.getElementById('receiptMerchant');
+const receiptNumber = document.getElementById('receiptNumber');
+const receiptGross = document.getElementById('receiptGross');
+const receiptCategory = document.getElementById('receiptCategory');
+const receiptDescription = document.getElementById('receiptDescription');
+const receiptPayment = document.getElementById('receiptPayment');
+const receiptMsg = document.getElementById('receiptMsg');
+const receiptList = document.getElementById('receiptList');
+
 const modal = document.getElementById('detailModal');
 const detailTitle = document.getElementById('detailTitle');
 const detailBody = document.getElementById('detailBody');
@@ -36,7 +48,7 @@ let requests=[];let selectedRequest=null;
 function escapeHtml(value){return String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;')}
 function formatDate(value){if(!value)return '—';const d=new Date(value+'T00:00:00');return Number.isNaN(d.getTime())?value:d.toLocaleDateString('de-DE')}
 function showLoginMessage(message){loginMsg.textContent=message;loginMsg.classList.remove('hidden')}
-async function init(){const {data,error}=await db.auth.getSession();if(error){showLoginMessage(error.message);return}const session=data.session;if(!session){loginEl.classList.remove('hidden');dashEl.classList.add('hidden');return}loginEl.classList.add('hidden');dashEl.classList.remove('hidden');userEl.textContent=session.user.email||'';showView('dashboard');await load()}
+async function init(){const {data,error}=await db.auth.getSession();if(error){showLoginMessage(error.message);return}const session=data.session;if(!session){loginEl.classList.remove('hidden');dashEl.classList.add('hidden');return}loginEl.classList.add('hidden');dashEl.classList.remove('hidden');userEl.textContent=session.user.email||'';showView('dashboard');await load();await loadReceipts()}
 async function load(){
   listEl.innerHTML='<p>Aktualisiere Anfragen...</p>';
   const {data,error}=await db.from('requests').select('*').order('created_at',{ascending:false});
@@ -132,6 +144,133 @@ async function deleteRequest(id){
     alert('Die Anfrage konnte nicht gelöscht werden.\n\n'+err.message);
   }
 }
+
+function euro(value){
+  return Number(value||0).toLocaleString('de-DE',{style:'currency',currency:'EUR'});
+}
+
+function showReceiptMsg(message, error=false){
+  receiptMsg.textContent=message;
+  receiptMsg.classList.remove('hidden');
+  receiptMsg.style.color=error?'#b00020':'';
+}
+
+async function loadReceipts(){
+  if(!receiptList)return;
+  receiptList.innerHTML='<p>Belege werden geladen...</p>';
+  const {data,error}=await db.from('receipts').select('*').order('receipt_date',{ascending:false}).order('created_at',{ascending:false});
+  if(error){
+    receiptList.innerHTML=`<p class="notice">Fehler beim Laden: ${escapeHtml(error.message)}</p>`;
+    dashReceiptCount.textContent='—';
+    dashYearGross.textContent='—';
+    dashMonthGross.textContent='—';
+    return;
+  }
+
+  const rows=data||[];
+  const now=new Date();
+  const year=now.getFullYear();
+  const month=now.getMonth()+1;
+  const yearGross=rows.filter(r=>String(r.receipt_date||'').startsWith(String(year))).reduce((s,r)=>s+Number(r.gross_amount||0),0);
+  const monthGross=rows.filter(r=>{
+    const d=String(r.receipt_date||'').split('-');
+    return Number(d[0])===year && Number(d[1])===month;
+  }).reduce((s,r)=>s+Number(r.gross_amount||0),0);
+
+  dashReceiptCount.textContent=String(rows.length);
+  dashYearGross.textContent=euro(yearGross);
+  dashMonthGross.textContent=euro(monthGross);
+
+  if(!rows.length){
+    receiptList.innerHTML='<p>Noch keine Belege vorhanden.</p>';
+    return;
+  }
+
+  receiptList.innerHTML=rows.map(r=>`
+    <div class="row request-row">
+      <div><b>${escapeHtml(r.merchant||'Unbekannter Händler')}</b><small>${formatDate(r.receipt_date)}<br>${escapeHtml(r.receipt_number||'')}</small></div>
+      <div><b>${escapeHtml(r.category||'Sonstiges')}</b><small>${escapeHtml(r.description||'')}</small></div>
+      <div><b>${euro(r.gross_amount)}</b><small>${escapeHtml(r.payment_method||'')}</small></div>
+      <div>
+        ${r.storage_path ? `<button data-receipt-open="${escapeHtml(r.storage_path)}">Beleg öffnen</button>` : ''}
+        <button data-receipt-delete="${r.id}">Löschen</button>
+      </div>
+    </div>`).join('');
+}
+
+async function saveReceipt(){
+  const file=receiptImage.files?.[0];
+  if(!file){
+    showReceiptMsg('Bitte ein Belegfoto auswählen.',true);
+    return;
+  }
+
+  const gross=Number(String(receiptGross.value).replace(',','.'));
+  if(!Number.isFinite(gross)||gross<0){
+    showReceiptMsg('Bitte einen gültigen Bruttobetrag eingeben.',true);
+    return;
+  }
+
+  const {data:{session}}=await db.auth.getSession();
+  if(!session){
+    showReceiptMsg('Deine Anmeldung ist abgelaufen. Bitte erneut anmelden.',true);
+    return;
+  }
+
+  const id=crypto.randomUUID();
+  const ext=(file.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')||'jpg';
+  const path=`${id}.${ext}`;
+
+  showReceiptMsg('Beleg wird gespeichert…');
+
+  try{
+    const upload=await db.storage.from('receipts').upload(path,file,{contentType:file.type||'image/jpeg',upsert:false});
+    if(upload.error)throw upload.error;
+
+    const {error}=await db.from('receipts').insert({
+      id,
+      receipt_date:receiptDate.value,
+      merchant:receiptMerchant.value.trim()||null,
+      receipt_number:receiptNumber.value.trim()||null,
+      gross_amount:gross,
+      category:receiptCategory.value,
+      description:receiptDescription.value.trim()||null,
+      payment_method:receiptPayment.value,
+      storage_path:path
+    });
+    if(error){
+      await db.storage.from('receipts').remove([path]);
+      throw error;
+    }
+
+    receiptForm.reset();
+    receiptDate.value=new Date().toLocaleDateString('sv-SE');
+    showReceiptMsg('Beleg erfolgreich gespeichert.');
+    await loadReceipts();
+  }catch(err){
+    showReceiptMsg('Beleg konnte nicht gespeichert werden: '+err.message,true);
+  }
+}
+
+async function openReceipt(path){
+  const {data,error}=await db.storage.from('receipts').createSignedUrl(path,3600);
+  if(error||!data?.signedUrl){
+    alert('Beleg konnte nicht geöffnet werden.');
+    return;
+  }
+  window.open(data.signedUrl,'_blank','noopener');
+}
+
+async function deleteReceipt(id){
+  if(!confirm('Diesen Beleg wirklich löschen?'))return;
+  const {data,error}=await db.from('receipts').select('storage_path').eq('id',id).single();
+  if(error){alert('Beleg konnte nicht gefunden werden: '+error.message);return;}
+  if(data?.storage_path)await db.storage.from('receipts').remove([data.storage_path]);
+  const result=await db.from('receipts').delete().eq('id',id);
+  if(result.error){alert('Beleg konnte nicht gelöscht werden: '+result.error.message);return;}
+  await loadReceipts();
+}
+
 function showView(view){
   dashboardHome.classList.toggle('hidden',view!=='dashboard');
   requestsView.classList.toggle('hidden',view!=='requests');
@@ -142,6 +281,10 @@ function showView(view){
   if(view==='receipts')pageTitle.textContent='Belege';
 
   if(view==='requests')load();
+  if(view==='receipts'){
+    receiptDate.value=receiptDate.value||new Date().toLocaleDateString('sv-SE');
+    loadReceipts();
+  }
 }
 
 document.querySelectorAll('[data-nav]').forEach(btn=>{
@@ -149,6 +292,18 @@ document.querySelectorAll('[data-nav]').forEach(btn=>{
     showView(btn.dataset.nav);
     window.scrollTo({top:0,behavior:'smooth'});
   });
+});
+
+
+receiptForm.addEventListener('submit',async e=>{
+  e.preventDefault();
+  await saveReceipt();
+});
+receiptList.addEventListener('click',async e=>{
+  const open=e.target.closest('[data-receipt-open]');
+  if(open)return openReceipt(open.dataset.receiptOpen);
+  const del=e.target.closest('[data-receipt-delete]');
+  if(del)return deleteReceipt(del.dataset.receiptDelete);
 });
 
 loginForm.addEventListener('submit',async e=>{e.preventDefault();loginMsg.classList.add('hidden');const {error}=await db.auth.signInWithPassword({email:emailEl.value.trim(),password:passwordEl.value});if(error){showLoginMessage(error.message);return}await init()});

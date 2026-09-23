@@ -73,11 +73,55 @@
       </section>
     </section>
 
+
     <section id="receiptsView" class="hidden">
       <section class="panel">
-        <div class="head"><b>Belege</b></div>
-        <p>Die Belegverwaltung wird als nächster Bereich eingebaut.</p>
-        <p><b>Geplant:</b> Beleg fotografieren, automatische Erkennung, Bruttobetrag, Originalbeleg, dauerhaftes Archiv und Google-Sheets-Übertragung.</p>
+        <div class="head"><b>Beleg erfassen</b></div>
+        <form id="receiptForm" style="display:grid;gap:12px">
+          <label>Belegfoto
+            <input id="receiptImage" type="file" accept="image/*" capture="environment" required>
+          </label>
+          <label>Datum
+            <input id="receiptDate" type="date" required>
+          </label>
+          <label>Händler / Geschäft
+            <input id="receiptMerchant" type="text" placeholder="z. B. ATU">
+          </label>
+          <label>Belegnummer
+            <input id="receiptNumber" type="text">
+          </label>
+          <label>Bruttobetrag (€)
+            <input id="receiptGross" type="number" min="0" step="0.01" inputmode="decimal" required>
+          </label>
+          <label>Kategorie
+            <select id="receiptCategory">
+              <option value="KFZ">KFZ</option>
+              <option value="Kraftstoff">Kraftstoff</option>
+              <option value="Ersatzteile">Ersatzteile</option>
+              <option value="Betriebsmittel">Betriebsmittel</option>
+              <option value="Büro">Büro</option>
+              <option value="Sonstiges">Sonstiges</option>
+            </select>
+          </label>
+          <label>Beschreibung
+            <input id="receiptDescription" type="text">
+          </label>
+          <label>Zahlungsart
+            <select id="receiptPayment">
+              <option value="Bar">Bar</option>
+              <option value="EC/Karte">EC/Karte</option>
+              <option value="Überweisung">Überweisung</option>
+              <option value="Sonstiges">Sonstiges</option>
+            </select>
+          </label>
+          <p id="receiptMsg" class="notice hidden"></p>
+          <button class="primary" type="submit">Beleg speichern</button>
+        </form>
+      </section>
+
+      <section class="panel" style="margin-top:20px">
+        <div class="head"><b>Alle Belege</b></div>
+        <div id="receiptList"><p>Belege werden geladen...</p></div>
       </section>
     </section>
   </section>
@@ -96,6 +140,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
-<script src="admin.js?v=dashboard1"></script>
+<script src="admin.js?v=receipts1"></script>
 </body>
 </html>
