@@ -26,6 +26,10 @@ const dashToday = document.getElementById('dashToday');
 const dashReceiptCount = document.getElementById('dashReceiptCount');
 const dashYearGross = document.getElementById('dashYearGross');
 const dashMonthGross = document.getElementById('dashMonthGross');
+const dashYearCash=document.getElementById('dashYearCash');
+const dashYearCard=document.getElementById('dashYearCard');
+const dashYearTotal=document.getElementById('dashYearTotal');
+const dashMonthTotal=document.getElementById('dashMonthTotal');
 const receiptForm = document.getElementById('receiptForm');
 const receiptImage = document.getElementById('receiptImage');
 const receiptDate = document.getElementById('receiptDate');
@@ -71,10 +75,8 @@ async function load(){
   dashOpen.textContent=openCount;
   dashToday.textContent=todayCount;
 
-  // Belege werden in einem späteren Schritt an dieselbe Oberfläche angebunden.
-  dashReceiptCount.textContent='0';
-  dashYearGross.textContent='0,00 €';
-  dashMonthGross.textContent='0,00 €';
+  // Belegzahlen und Belegsummen werden separat von loadReceipts()
+  // aus der receipts-Tabelle geladen. Hier nichts auf 0 zurücksetzen.
 
   if(!requests.length){
     listEl.innerHTML='<p>Keine Anfragen vorhanden.</p>';
@@ -173,15 +175,42 @@ async function loadReceipts(){
   const now=new Date();
   const year=now.getFullYear();
   const month=now.getMonth()+1;
-  const yearGross=rows.filter(r=>String(r.receipt_date||'').startsWith(String(year))).reduce((s,r)=>s+Number(r.gross_amount||0),0);
-  const monthGross=rows.filter(r=>{
+  const yearRows=rows.filter(r=>String(r.receipt_date||'').startsWith(String(year)));
+  const monthRows=rows.filter(r=>{
     const d=String(r.receipt_date||'').split('-');
     return Number(d[0])===year && Number(d[1])===month;
-  }).reduce((s,r)=>s+Number(r.gross_amount||0),0);
+  });
+
+  // Der Gesamtbetrag enthält ALLE Zahlungsarten – Bar, EC/Karte,
+  // Überweisung und Sonstiges. Es wird nichts gegeneinander verrechnet.
+  const sumGross=list=>list.reduce((sum,r)=>{
+    const amount=Number(String(r.gross_amount??0).replace(',','.'));
+    return sum+(Number.isFinite(amount)?amount:0);
+  },0);
+
+  const yearGross=sumGross(yearRows);
+  const monthGross=sumGross(monthRows);
+
+  // Separate Summen für Bar und EC/Karte. Diese sind zusätzlich
+  // zum Gesamtbetrag verfügbar, ohne den Gesamtbetrag zu verändern.
+  const yearCash=sumGross(yearRows.filter(r=>r.payment_method==='Bar'));
+  const yearCard=sumGross(yearRows.filter(r=>r.payment_method==='EC/Karte'));
+  const monthCash=sumGross(monthRows.filter(r=>r.payment_method==='Bar'));
+  const monthCard=sumGross(monthRows.filter(r=>r.payment_method==='EC/Karte'));
 
   dashReceiptCount.textContent=String(rows.length);
   dashYearGross.textContent=euro(yearGross);
   dashMonthGross.textContent=euro(monthGross);
+  if(dashYearCash)dashYearCash.textContent=euro(yearCash);
+  if(dashYearCard)dashYearCard.textContent=euro(yearCard);
+  if(dashYearTotal)dashYearTotal.textContent=euro(yearGross);
+  if(dashMonthTotal)dashMonthTotal.textContent=euro(monthGross);
+
+  // Für spätere Auswertung bereits bereitgestellt.
+  window.receiptTotals={
+    year:{gross:yearGross,cash:yearCash,card:yearCard},
+    month:{gross:monthGross,cash:monthCash,card:monthCard}
+  };
 
   if(!rows.length){
     receiptList.innerHTML='<p>Noch keine Belege vorhanden.</p>';
@@ -379,4 +408,17 @@ receiptList.addEventListener('click',async e=>{
 loginForm.addEventListener('submit',async e=>{e.preventDefault();loginMsg.classList.add('hidden');const {error}=await db.auth.signInWithPassword({email:emailEl.value.trim(),password:passwordEl.value});if(error){showLoginMessage(error.message);return}await init()});
 listEl.addEventListener('click',async e=>{const button=e.target.closest('button[data-action]');if(!button)return;const id=button.dataset.id;const action=button.dataset.action;if(action==='details')return openDetails(id);if(action==='confirm')return confirmRequest(id);if(action==='reject')return rejectRequest(id);if(action==='alternative')return alternativeRequest(id);if(action==='delete')return deleteRequest(id)});
 detailActions.addEventListener('click',async e=>{const button=e.target.closest('button[data-modal-action]');if(!button||!selectedRequest)return;const action=button.dataset.modalAction;if(action==='confirm')await confirmRequest(selectedRequest.id);if(action==='reject')await rejectRequest(selectedRequest.id);if(action==='alternative')await alternativeRequest(selectedRequest.id);if(action==='delete')await deleteRequest(selectedRequest.id)});
-closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',load);init();
+closeModal.addEventListener('click',closeDetails);
+modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});
+logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});
+refreshBtn.addEventListener('click',async()=>{
+  refreshBtn.disabled=true;
+  refreshBtn.textContent='Aktualisiere…';
+  try{
+    await Promise.all([load(),loadReceipts()]);
+  }finally{
+    refreshBtn.disabled=false;
+    refreshBtn.textContent='Aktualisieren';
+  }
+});
+init();
