@@ -207,92 +207,45 @@ function showOcrMsg(message,error=false){
   ocrMsg.style.color=error?'#b00020':'';
 }
 
-function normalizeOcrText(text){
-  return String(text||'')
-    .replace(/\r/g,'')
-    .replace(/[ \t]+/g,' ')
-    .split('\n')
-    .map(x=>x.trim())
-    .filter(Boolean)
-    .join('\n');
+function showOcrMsg(message,error=false){
+  ocrMsg.textContent=message;
+  ocrMsg.classList.remove('hidden');
+  ocrMsg.style.color=error?'#b00020':'';
 }
 
-function parseGermanDate(text){
-  const m=text.match(/\b(0?[1-9]|[12]\d|3[01])[.\-/](0?[1-9]|1[0-2])[.\-/](20\d{2})\b/);
-  if(!m)return null;
-  return `${m[3]}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;
-}
+async function prepareReceiptImage(file){
+  const dataUrl=await new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(reader.result);
+    reader.onerror=()=>reject(reader.error||new Error('Foto konnte nicht gelesen werden.'));
+    reader.readAsDataURL(file);
+  });
 
-function parseGrossAmount(text){
-  const lines=text.split('\n');
-  const preferred=/\b(gesamtbetrag|gesamt|endsumme|summe|zahlbetrag|zu zahlen|zu\s*zahlen|endbetrag|total)\b/i;
-  const amounts=[];
-  const rx=/(\d{1,5}(?:[.,]\d{3})*[.,]\d{2})\s*(?:€|EUR)?/gi;
+  const img=await new Promise((resolve,reject)=>{
+    const image=new Image();
+    image.onload=()=>resolve(image);
+    image.onerror=()=>reject(new Error('Foto konnte nicht verarbeitet werden.'));
+    image.src=dataUrl;
+  });
 
-  for(const line of lines){
-    let m;
-    while((m=rx.exec(line))){
-      const raw=m[1];
-      const normalized=raw.includes(',') ? raw.replace(/\./g,'').replace(',','.') : raw;
-      const value=Number(normalized);
-      if(Number.isFinite(value)) amounts.push({value,line});
-    }
-  }
+  // Begrenzung der Bildgröße reduziert API-Bildkosten, behält aber
+  // genug Auflösung für kleine Belegschrift.
+  const maxSide=1800;
+  const scale=Math.min(1,maxSide/Math.max(img.naturalWidth,img.naturalHeight));
+  const width=Math.max(1,Math.round(img.naturalWidth*scale));
+  const height=Math.max(1,Math.round(img.naturalHeight*scale));
 
-  const preferredAmounts=amounts.filter(x=>preferred.test(x.line));
-  if(preferredAmounts.length)return preferredAmounts[preferredAmounts.length-1].value;
-  if(amounts.length)return amounts[amounts.length-1].value;
-  return null;
-}
+  const canvas=document.createElement('canvas');
+  canvas.width=width;
+  canvas.height=height;
 
-function parseReceiptNumber(text){
-  const patterns=[
-    /(?:bon|beleg|beleg[- ]?nr\.?|bon[- ]?nr\.?|rechnung|rechnungs[- ]?nr\.?|belegnummer)\s*[:#]?\s*([A-Z0-9][A-Z0-9\-\/]{2,})/i
-  ];
-  for(const p of patterns){
-    const m=text.match(p);
-    if(m)return m[1];
-  }
-  return null;
-}
+  const ctx=canvas.getContext('2d',{alpha:false});
+  if(!ctx)throw new Error('Bildverarbeitung wird auf diesem Gerät nicht unterstützt.');
 
-function parseMerchant(text){
-  const lines=text.split('\n').map(x=>x.trim()).filter(Boolean);
-  const bad=/^(datum|uhrzeit|tel\.?|telefon|www\.|http|rechnung|bon|beleg|kasse|pos|summe|gesamt|total|artikel|menge|preis|mwst|ust|eur|€)$/i;
-  for(const line of lines.slice(0,8)){
-    if(line.length<2 || line.length>50)continue;
-    if(bad.test(line))continue;
-    if(/^\d[\d .,:\/-]*$/.test(line))continue;
-    if(/^(.*\bGmbH\b|.*\bAG\b|.*\be\.?K\.?\b|.*\bOHG\b|.*\bKG\b)$/i.test(line))return line;
-  }
-  for(const line of lines.slice(0,6)){
-    if(line.length>=2 && line.length<=50 && !bad.test(line) && !/^\d/.test(line))return line;
-  }
-  return null;
-}
+  ctx.drawImage(img,0,0,width,height);
 
-function parseCategory(text){
-  const t=text.toLowerCase();
-  if(/tank|diesel|benzin|super\s*e10|super\s*plus|kraftstoff|zapfsäule/.test(t))return 'Kraftstoff';
-  if(/reifen|felge|brems|ölfilter|luftfilter|ersatzteil|autoteil|zündkerze/.test(t))return 'Ersatzteile';
-  if(/auto|fahrzeug|kfz|wasch|politur|lack|scheibenwisch|motoröl/.test(t))return 'KFZ';
-  if(/drucker|papier|toner|ordner|bürobedarf|brief|stift/.test(t))return 'Büro';
-  if(/reiniger|reinigungsmittel|werkzeug|schraube|handschuh|material|betriebsmittel/.test(t))return 'Betriebsmittel';
-  return 'Sonstiges';
-}
-
-function parsePaymentMethod(text){
-  const t=text.toLowerCase();
-  if(/\bbar\b|barzahlung/.test(t))return 'Bar';
-  if(/ec|girocard|mastercard|visa|kontaktlos|karte/.test(t))return 'EC/Karte';
-  if(/überweisung|banküberweisung/.test(t))return 'Überweisung';
-  return 'Sonstiges';
-}
-
-function parseDescription(text){
-  const lines=text.split('\n').map(x=>x.trim()).filter(Boolean);
-  const useful=lines.filter(x=>x.length>=4 && x.length<=80 && !/^(summe|gesamt|total|mwst|ust|datum|uhrzeit|kasse|bon|beleg)/i.test(x));
-  return useful.slice(1,3).join(', ') || null;
+  // JPEG ist für Kassenbons deutlich kleiner als das originale Handyfoto.
+  return canvas.toDataURL('image/jpeg',0.82);
 }
 
 async function recognizeReceipt(){
@@ -307,50 +260,39 @@ async function recognizeReceipt(){
     return;
   }
 
-  if(typeof Tesseract==='undefined'){
-    showOcrMsg('Die kostenlose OCR-Bibliothek konnte nicht geladen werden. Bitte Internetverbindung prüfen und Seite neu laden.',true);
-    return;
-  }
-
   ocrReceiptBtn.disabled=true;
-  ocrReceiptBtn.textContent='🔎 Beleg wird lokal gelesen…';
-  showOcrMsg('Kostenlose OCR läuft direkt auf deinem Handy. Das kann beim ersten Mal etwas dauern.');
+  ocrReceiptBtn.textContent='🔎 Beleg wird erkannt…';
+  showOcrMsg('Beleg wird vorbereitet und analysiert. Bitte einen Moment warten…');
 
-  let worker=null;
   try{
-    worker=await Tesseract.createWorker('deu',1);
-    const result=await worker.recognize(file,{rotateAuto:true});
-    const text=normalizeOcrText(result?.data?.text||'');
+    const imageData=await prepareReceiptImage(file);
+    const {data:{session}}=await db.auth.getSession();
+    if(!session)throw new Error('Deine Anmeldung ist abgelaufen. Bitte erneut anmelden.');
 
-    if(!text){
-      throw new Error('Auf dem Beleg konnte kein Text erkannt werden. Bitte ein schärferes Foto bei guter Beleuchtung machen.');
-    }
+    const response=await fetch(`${window.SUPABASE_URL}/functions/v1/ocr-receipt`,{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':`Bearer ${session.access_token}`
+      },
+      body:JSON.stringify({image:imageData})
+    });
 
-    const date=parseGermanDate(text);
-    const gross=parseGrossAmount(text);
-    const merchant=parseMerchant(text);
-    const receiptNo=parseReceiptNumber(text);
-    const category=parseCategory(text);
-    const payment=parsePaymentMethod(text);
-    const description=parseDescription(text);
+    const result=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(result.error||'Die Belegerkennung ist fehlgeschlagen.');
 
-    if(date)receiptDate.value=date;
-    if(merchant)receiptMerchant.value=merchant;
-    if(receiptNo)receiptNumber.value=receiptNo;
-    if(gross!==null)receiptGross.value=gross.toFixed(2);
-    if(category)receiptCategory.value=category;
-    if(description)receiptDescription.value=description;
-    if(payment)receiptPayment.value=payment;
+    if(result.receipt_date)receiptDate.value=result.receipt_date;
+    if(result.merchant)receiptMerchant.value=result.merchant;
+    if(result.receipt_number)receiptNumber.value=result.receipt_number;
+    if(result.gross_amount!==null && result.gross_amount!==undefined)receiptGross.value=Number(result.gross_amount).toFixed(2);
+    if(result.category)receiptCategory.value=result.category;
+    if(result.description)receiptDescription.value=result.description;
+    if(result.payment_method)receiptPayment.value=result.payment_method;
 
-    showOcrMsg(
-      gross!==null
-        ? 'Erkennung abgeschlossen. Bitte alle Felder kontrollieren – besonders den Bruttobetrag – und anschließend speichern.'
-        : 'Text wurde erkannt, aber der Bruttobetrag konnte nicht sicher ermittelt werden. Bitte Betrag manuell eintragen und die übrigen Felder kontrollieren.'
-    );
+    showOcrMsg('Erkennung abgeschlossen. Bitte die Daten kontrollieren – besonders den Bruttobetrag – und anschließend speichern.');
   }catch(err){
-    showOcrMsg(err?.message||'Die kostenlose Belegerkennung ist fehlgeschlagen.',true);
+    showOcrMsg(err?.message||'Die Belegerkennung ist fehlgeschlagen.',true);
   }finally{
-    if(worker)await worker.terminate().catch(()=>{});
     ocrReceiptBtn.disabled=false;
     ocrReceiptBtn.textContent='🔎 Beleg automatisch erkennen';
   }
