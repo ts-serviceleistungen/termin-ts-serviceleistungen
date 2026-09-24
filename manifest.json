@@ -1,0 +1,15 @@
+{
+  "name": "T.S. Serviceleistungen",
+  "short_name": "T.S. Service",
+  "description": "Verwaltung von T.S. Serviceleistungen",
+  "lang": "de-DE",
+  "start_url": "./admin.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f3f3f1",
+  "theme_color": "#090909",
+  "icons": [
+    {"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
+  ]
+}

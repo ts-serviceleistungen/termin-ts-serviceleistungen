@@ -207,45 +207,13 @@ function showOcrMsg(message,error=false){
   ocrMsg.style.color=error?'#b00020':'';
 }
 
-function showOcrMsg(message,error=false){
-  ocrMsg.textContent=message;
-  ocrMsg.classList.remove('hidden');
-  ocrMsg.style.color=error?'#b00020':'';
-}
-
-async function prepareReceiptImage(file){
-  const dataUrl=await new Promise((resolve,reject)=>{
+function fileToDataUrl(file){
+  return new Promise((resolve,reject)=>{
     const reader=new FileReader();
     reader.onload=()=>resolve(reader.result);
-    reader.onerror=()=>reject(reader.error||new Error('Foto konnte nicht gelesen werden.'));
+    reader.onerror=()=>reject(reader.error||new Error('Datei konnte nicht gelesen werden.'));
     reader.readAsDataURL(file);
   });
-
-  const img=await new Promise((resolve,reject)=>{
-    const image=new Image();
-    image.onload=()=>resolve(image);
-    image.onerror=()=>reject(new Error('Foto konnte nicht verarbeitet werden.'));
-    image.src=dataUrl;
-  });
-
-  // Begrenzung der Bildgröße reduziert API-Bildkosten, behält aber
-  // genug Auflösung für kleine Belegschrift.
-  const maxSide=1800;
-  const scale=Math.min(1,maxSide/Math.max(img.naturalWidth,img.naturalHeight));
-  const width=Math.max(1,Math.round(img.naturalWidth*scale));
-  const height=Math.max(1,Math.round(img.naturalHeight*scale));
-
-  const canvas=document.createElement('canvas');
-  canvas.width=width;
-  canvas.height=height;
-
-  const ctx=canvas.getContext('2d',{alpha:false});
-  if(!ctx)throw new Error('Bildverarbeitung wird auf diesem Gerät nicht unterstützt.');
-
-  ctx.drawImage(img,0,0,width,height);
-
-  // JPEG ist für Kassenbons deutlich kleiner als das originale Handyfoto.
-  return canvas.toDataURL('image/jpeg',0.82);
 }
 
 async function recognizeReceipt(){
@@ -262,10 +230,10 @@ async function recognizeReceipt(){
 
   ocrReceiptBtn.disabled=true;
   ocrReceiptBtn.textContent='🔎 Beleg wird erkannt…';
-  showOcrMsg('Beleg wird vorbereitet und analysiert. Bitte einen Moment warten…');
+  showOcrMsg('Beleg wird analysiert. Bitte einen Moment warten…');
 
   try{
-    const imageData=await prepareReceiptImage(file);
+    const dataUrl=await fileToDataUrl(file);
     const {data:{session}}=await db.auth.getSession();
     if(!session)throw new Error('Deine Anmeldung ist abgelaufen. Bitte erneut anmelden.');
 
@@ -275,7 +243,7 @@ async function recognizeReceipt(){
         'Content-Type':'application/json',
         'Authorization':`Bearer ${session.access_token}`
       },
-      body:JSON.stringify({image:imageData})
+      body:JSON.stringify({image:dataUrl})
     });
 
     const result=await response.json().catch(()=>({}));
@@ -291,7 +259,7 @@ async function recognizeReceipt(){
 
     showOcrMsg('Erkennung abgeschlossen. Bitte die Daten kontrollieren – besonders den Bruttobetrag – und anschließend speichern.');
   }catch(err){
-    showOcrMsg(err?.message||'Die Belegerkennung ist fehlgeschlagen.',true);
+    showOcrMsg(err.message,true);
   }finally{
     ocrReceiptBtn.disabled=false;
     ocrReceiptBtn.textContent='🔎 Beleg automatisch erkennen';
@@ -411,4 +379,4 @@ receiptList.addEventListener('click',async e=>{
 loginForm.addEventListener('submit',async e=>{e.preventDefault();loginMsg.classList.add('hidden');const {error}=await db.auth.signInWithPassword({email:emailEl.value.trim(),password:passwordEl.value});if(error){showLoginMessage(error.message);return}await init()});
 listEl.addEventListener('click',async e=>{const button=e.target.closest('button[data-action]');if(!button)return;const id=button.dataset.id;const action=button.dataset.action;if(action==='details')return openDetails(id);if(action==='confirm')return confirmRequest(id);if(action==='reject')return rejectRequest(id);if(action==='alternative')return alternativeRequest(id);if(action==='delete')return deleteRequest(id)});
 detailActions.addEventListener('click',async e=>{const button=e.target.closest('button[data-modal-action]');if(!button||!selectedRequest)return;const action=button.dataset.modalAction;if(action==='confirm')await confirmRequest(selectedRequest.id);if(action==='reject')await rejectRequest(selectedRequest.id);if(action==='alternative')await alternativeRequest(selectedRequest.id);if(action==='delete')await deleteRequest(selectedRequest.id)});
-closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',async()=>{await load();await loadReceipts()});init();
+closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',load);init();
