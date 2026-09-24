@@ -26,10 +26,9 @@ const dashToday = document.getElementById('dashToday');
 const dashReceiptCount = document.getElementById('dashReceiptCount');
 const dashYearGross = document.getElementById('dashYearGross');
 const dashMonthGross = document.getElementById('dashMonthGross');
-const dashYearCash=document.getElementById('dashYearCash');
-const dashYearCard=document.getElementById('dashYearCard');
-const dashYearTotal=document.getElementById('dashYearTotal');
-const dashMonthTotal=document.getElementById('dashMonthTotal');
+const dashInvoiceGross = document.getElementById('dashInvoiceGross');
+
+const INVOICE_TOTAL_URL = 'https://script.google.com/macros/s/AKfycbwgt0D4wTsK55OhiTS3OGAEN-XzGMDhNXrC7_gbr1MWm4UFzl9fEqKqLZzO2GrGlsw1/exec';
 const receiptForm = document.getElementById('receiptForm');
 const receiptImage = document.getElementById('receiptImage');
 const receiptDate = document.getElementById('receiptDate');
@@ -54,7 +53,7 @@ let requests=[];let selectedRequest=null;
 function escapeHtml(value){return String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;')}
 function formatDate(value){if(!value)return '—';const d=new Date(value+'T00:00:00');return Number.isNaN(d.getTime())?value:d.toLocaleDateString('de-DE')}
 function showLoginMessage(message){loginMsg.textContent=message;loginMsg.classList.remove('hidden')}
-async function init(){const {data,error}=await db.auth.getSession();if(error){showLoginMessage(error.message);return}const session=data.session;if(!session){loginEl.classList.remove('hidden');dashEl.classList.add('hidden');return}loginEl.classList.add('hidden');dashEl.classList.remove('hidden');userEl.textContent=session.user.email||'';showView('dashboard');await load();await loadReceipts()}
+async function init(){const {data,error}=await db.auth.getSession();if(error){showLoginMessage(error.message);return}const session=data.session;if(!session){loginEl.classList.remove('hidden');dashEl.classList.add('hidden');return}loginEl.classList.add('hidden');dashEl.classList.remove('hidden');userEl.textContent=session.user.email||'';showView('dashboard');await load();await loadReceipts();await loadInvoiceTotal()}
 async function load(){
   listEl.innerHTML='<p>Aktualisiere Anfragen...</p>';
   const {data,error}=await db.from('requests').select('*').order('created_at',{ascending:false});
@@ -75,8 +74,10 @@ async function load(){
   dashOpen.textContent=openCount;
   dashToday.textContent=todayCount;
 
-  // Belegzahlen und Belegsummen werden separat von loadReceipts()
-  // aus der receipts-Tabelle geladen. Hier nichts auf 0 zurücksetzen.
+  // Belege werden in einem späteren Schritt an dieselbe Oberfläche angebunden.
+  dashReceiptCount.textContent='0';
+  dashYearGross.textContent='0,00 €';
+  dashMonthGross.textContent='0,00 €';
 
   if(!requests.length){
     listEl.innerHTML='<p>Keine Anfragen vorhanden.</p>';
@@ -153,6 +154,20 @@ function euro(value){
   return Number(value||0).toLocaleString('de-DE',{style:'currency',currency:'EUR'});
 }
 
+async function loadInvoiceTotal(){
+  if(!dashInvoiceGross)return;
+  dashInvoiceGross.textContent='…';
+  try{
+    const response=await fetch(INVOICE_TOTAL_URL,{cache:'no-store'});
+    const result=await response.json().catch(()=>({}));
+    if(!response.ok || !result.ok)throw new Error(result.error||'Rechnungssumme konnte nicht geladen werden.');
+    dashInvoiceGross.textContent=euro(result.bruttoGesamt);
+  }catch(err){
+    console.warn('Rechnungssumme konnte nicht geladen werden:',err.message);
+    dashInvoiceGross.textContent='—';
+  }
+}
+
 function showReceiptMsg(message, error=false){
   receiptMsg.textContent=message;
   receiptMsg.classList.remove('hidden');
@@ -175,42 +190,15 @@ async function loadReceipts(){
   const now=new Date();
   const year=now.getFullYear();
   const month=now.getMonth()+1;
-  const yearRows=rows.filter(r=>String(r.receipt_date||'').startsWith(String(year)));
-  const monthRows=rows.filter(r=>{
+  const yearGross=rows.filter(r=>String(r.receipt_date||'').startsWith(String(year))).reduce((s,r)=>s+Number(r.gross_amount||0),0);
+  const monthGross=rows.filter(r=>{
     const d=String(r.receipt_date||'').split('-');
     return Number(d[0])===year && Number(d[1])===month;
-  });
-
-  // Der Gesamtbetrag enthält ALLE Zahlungsarten – Bar, EC/Karte,
-  // Überweisung und Sonstiges. Es wird nichts gegeneinander verrechnet.
-  const sumGross=list=>list.reduce((sum,r)=>{
-    const amount=Number(String(r.gross_amount??0).replace(',','.'));
-    return sum+(Number.isFinite(amount)?amount:0);
-  },0);
-
-  const yearGross=sumGross(yearRows);
-  const monthGross=sumGross(monthRows);
-
-  // Separate Summen für Bar und EC/Karte. Diese sind zusätzlich
-  // zum Gesamtbetrag verfügbar, ohne den Gesamtbetrag zu verändern.
-  const yearCash=sumGross(yearRows.filter(r=>r.payment_method==='Bar'));
-  const yearCard=sumGross(yearRows.filter(r=>r.payment_method==='EC/Karte'));
-  const monthCash=sumGross(monthRows.filter(r=>r.payment_method==='Bar'));
-  const monthCard=sumGross(monthRows.filter(r=>r.payment_method==='EC/Karte'));
+  }).reduce((s,r)=>s+Number(r.gross_amount||0),0);
 
   dashReceiptCount.textContent=String(rows.length);
   dashYearGross.textContent=euro(yearGross);
   dashMonthGross.textContent=euro(monthGross);
-  if(dashYearCash)dashYearCash.textContent=euro(yearCash);
-  if(dashYearCard)dashYearCard.textContent=euro(yearCard);
-  if(dashYearTotal)dashYearTotal.textContent=euro(yearGross);
-  if(dashMonthTotal)dashMonthTotal.textContent=euro(monthGross);
-
-  // Für spätere Auswertung bereits bereitgestellt.
-  window.receiptTotals={
-    year:{gross:yearGross,cash:yearCash,card:yearCard},
-    month:{gross:monthGross,cash:monthCash,card:monthCard}
-  };
 
   if(!rows.length){
     receiptList.innerHTML='<p>Noch keine Belege vorhanden.</p>';
@@ -408,17 +396,4 @@ receiptList.addEventListener('click',async e=>{
 loginForm.addEventListener('submit',async e=>{e.preventDefault();loginMsg.classList.add('hidden');const {error}=await db.auth.signInWithPassword({email:emailEl.value.trim(),password:passwordEl.value});if(error){showLoginMessage(error.message);return}await init()});
 listEl.addEventListener('click',async e=>{const button=e.target.closest('button[data-action]');if(!button)return;const id=button.dataset.id;const action=button.dataset.action;if(action==='details')return openDetails(id);if(action==='confirm')return confirmRequest(id);if(action==='reject')return rejectRequest(id);if(action==='alternative')return alternativeRequest(id);if(action==='delete')return deleteRequest(id)});
 detailActions.addEventListener('click',async e=>{const button=e.target.closest('button[data-modal-action]');if(!button||!selectedRequest)return;const action=button.dataset.modalAction;if(action==='confirm')await confirmRequest(selectedRequest.id);if(action==='reject')await rejectRequest(selectedRequest.id);if(action==='alternative')await alternativeRequest(selectedRequest.id);if(action==='delete')await deleteRequest(selectedRequest.id)});
-closeModal.addEventListener('click',closeDetails);
-modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});
-logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});
-refreshBtn.addEventListener('click',async()=>{
-  refreshBtn.disabled=true;
-  refreshBtn.textContent='Aktualisiere…';
-  try{
-    await Promise.all([load(),loadReceipts()]);
-  }finally{
-    refreshBtn.disabled=false;
-    refreshBtn.textContent='Aktualisieren';
-  }
-});
-init();
+closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',async()=>{refreshBtn.disabled=true;try{await Promise.all([load(),loadReceipts(),loadInvoiceTotal()]);}finally{refreshBtn.disabled=false;}});init();

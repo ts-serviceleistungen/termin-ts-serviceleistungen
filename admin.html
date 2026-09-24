@@ -4,8 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>T.S. Serviceleistungen – Admin</title>
-<link rel="manifest" href="manifest.json">
-<link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -51,12 +49,10 @@
         <div><b id="dashYearGross">0,00 €</b><small>Ausgaben dieses Jahr · brutto</small></div>
         <div><b id="dashMonthGross">0,00 €</b><small>Ausgaben diesen Monat · brutto</small></div>
       </div>
-      <div class="payment-summary">
-        <div class="payment-card cash"><span>BAR</span><b id="dashYearCash">0,00 €</b><small>dieses Jahr</small></div>
-        <div class="payment-card card"><span>EC / KARTE</span><b id="dashYearCard">0,00 €</b><small>dieses Jahr</small></div>
-        <div class="payment-card total"><span>GESAMT</span><b id="dashYearTotal">0,00 €</b><small>alle Zahlungsarten · brutto</small></div>
+
+      <div class="stats" style="margin-top:16px">
+        <div><b id="dashInvoiceGross">—</b><small>Rechnungen · Brutto gesamt</small></div>
       </div>
-      <div class="payment-month"><span>Dieser Monat</span><b id="dashMonthTotal">0,00 €</b></div>
 
       <section class="panel" style="margin-top:20px">
         <div class="head"><b>Schnellzugriff</b><span id="user"></span></div>
@@ -153,6 +149,5 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script src="admin.js?v=ocr1"></script>
-<script src="pwa.js"></script>
 </body>
 </html>
