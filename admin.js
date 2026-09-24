@@ -27,6 +27,7 @@ const dashReceiptCount = document.getElementById('dashReceiptCount');
 const dashYearGross = document.getElementById('dashYearGross');
 const dashMonthGross = document.getElementById('dashMonthGross');
 const dashInvoiceGross = document.getElementById('dashInvoiceGross');
+const dashProfit = document.getElementById('dashProfit');
 
 const INVOICE_TOTAL_URL = 'https://script.google.com/macros/s/AKfycbwgt0D4wTsK55OhiTS3OGAEN-XzGMDhNXrC7_gbr1MWm4UFzl9fEqKqLZzO2GrGlsw1/exec';
 const receiptForm = document.getElementById('receiptForm');
@@ -154,6 +155,17 @@ function euro(value){
   return Number(value||0).toLocaleString('de-DE',{style:'currency',currency:'EUR'});
 }
 
+function updateProfit(){
+  if(!dashProfit)return;
+  const einnahmen=Number(window.invoiceTotalGross);
+  const ausgaben=Number(window.receiptTotalGross);
+  if(!Number.isFinite(einnahmen)||!Number.isFinite(ausgaben)){
+    dashProfit.textContent='—';
+    return;
+  }
+  dashProfit.textContent=euro(einnahmen-ausgaben);
+}
+
 async function loadInvoiceTotal(){
   if(!dashInvoiceGross)return;
   dashInvoiceGross.textContent='…';
@@ -161,10 +173,15 @@ async function loadInvoiceTotal(){
     const response=await fetch(INVOICE_TOTAL_URL,{cache:'no-store'});
     const result=await response.json().catch(()=>({}));
     if(!response.ok || !result.ok)throw new Error(result.error||'Rechnungssumme konnte nicht geladen werden.');
-    dashInvoiceGross.textContent=euro(result.bruttoGesamt);
+    const bruttoGesamt=Number(result.bruttoGesamt);
+    window.invoiceTotalGross=Number.isFinite(bruttoGesamt)?bruttoGesamt:null;
+    dashInvoiceGross.textContent=euro(bruttoGesamt);
+    updateProfit();
   }catch(err){
     console.warn('Rechnungssumme konnte nicht geladen werden:',err.message);
+    window.invoiceTotalGross=null;
     dashInvoiceGross.textContent='—';
+    updateProfit();
   }
 }
 
@@ -195,6 +212,10 @@ async function loadReceipts(){
     const d=String(r.receipt_date||'').split('-');
     return Number(d[0])===year && Number(d[1])===month;
   }).reduce((s,r)=>s+Number(r.gross_amount||0),0);
+  const totalGross=rows.reduce((s,r)=>s+Number(r.gross_amount||0),0);
+
+  window.receiptTotalGross=Number.isFinite(totalGross)?totalGross:null;
+  updateProfit();
 
   dashReceiptCount.textContent=String(rows.length);
   dashYearGross.textContent=euro(yearGross);
@@ -396,4 +417,5 @@ receiptList.addEventListener('click',async e=>{
 loginForm.addEventListener('submit',async e=>{e.preventDefault();loginMsg.classList.add('hidden');const {error}=await db.auth.signInWithPassword({email:emailEl.value.trim(),password:passwordEl.value});if(error){showLoginMessage(error.message);return}await init()});
 listEl.addEventListener('click',async e=>{const button=e.target.closest('button[data-action]');if(!button)return;const id=button.dataset.id;const action=button.dataset.action;if(action==='details')return openDetails(id);if(action==='confirm')return confirmRequest(id);if(action==='reject')return rejectRequest(id);if(action==='alternative')return alternativeRequest(id);if(action==='delete')return deleteRequest(id)});
 detailActions.addEventListener('click',async e=>{const button=e.target.closest('button[data-modal-action]');if(!button||!selectedRequest)return;const action=button.dataset.modalAction;if(action==='confirm')await confirmRequest(selectedRequest.id);if(action==='reject')await rejectRequest(selectedRequest.id);if(action==='alternative')await alternativeRequest(selectedRequest.id);if(action==='delete')await deleteRequest(selectedRequest.id)});
-closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',async()=>{refreshBtn.disabled=true;try{await Promise.all([load(),loadReceipts(),loadInvoiceTotal()]);}finally{refreshBtn.disabled=false;}});init();
+closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',async()=>{refreshBtn.disabled=true;try{await Promise.all([load(),loadReceipts(),loadInvoiceTotal()]);
+    updateProfit();}finally{refreshBtn.disabled=false;}});init();
