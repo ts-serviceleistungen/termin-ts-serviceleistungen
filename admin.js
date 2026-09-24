@@ -50,6 +50,8 @@ const detailBody = document.getElementById('detailBody');
 const detailActions = document.getElementById('detailActions');
 const closeModal = document.getElementById('closeModal');
 let requests=[];let selectedRequest=null;
+let currentInvoiceTotal=null;
+let currentReceiptTotal=null;
 
 function escapeHtml(value){return String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;')}
 function formatDate(value){if(!value)return '—';const d=new Date(value+'T00:00:00');return Number.isNaN(d.getTime())?value:d.toLocaleDateString('de-DE')}
@@ -157,13 +159,11 @@ function euro(value){
 
 function updateProfit(){
   if(!dashProfit)return;
-  const einnahmen=Number(window.invoiceTotalGross);
-  const ausgaben=Number(window.receiptTotalGross);
-  if(!Number.isFinite(einnahmen)||!Number.isFinite(ausgaben)){
+  if(!Number.isFinite(currentInvoiceTotal)||!Number.isFinite(currentReceiptTotal)){
     dashProfit.textContent='—';
     return;
   }
-  dashProfit.textContent=euro(einnahmen-ausgaben);
+  dashProfit.textContent=euro(currentInvoiceTotal-currentReceiptTotal);
 }
 
 async function loadInvoiceTotal(){
@@ -174,11 +174,13 @@ async function loadInvoiceTotal(){
     const result=await response.json().catch(()=>({}));
     if(!response.ok || !result.ok)throw new Error(result.error||'Rechnungssumme konnte nicht geladen werden.');
     const bruttoGesamt=Number(result.bruttoGesamt);
-    window.invoiceTotalGross=Number.isFinite(bruttoGesamt)?bruttoGesamt:null;
+    currentInvoiceTotal=Number.isFinite(bruttoGesamt)?bruttoGesamt:null;
+    window.invoiceTotalGross=currentInvoiceTotal;
     dashInvoiceGross.textContent=euro(bruttoGesamt);
     updateProfit();
   }catch(err){
     console.warn('Rechnungssumme konnte nicht geladen werden:',err.message);
+    currentInvoiceTotal=null;
     window.invoiceTotalGross=null;
     dashInvoiceGross.textContent='—';
     updateProfit();
@@ -214,7 +216,8 @@ async function loadReceipts(){
   }).reduce((s,r)=>s+Number(r.gross_amount||0),0);
   const totalGross=rows.reduce((s,r)=>s+Number(r.gross_amount||0),0);
 
-  window.receiptTotalGross=Number.isFinite(totalGross)?totalGross:null;
+  currentReceiptTotal=Number.isFinite(totalGross)?totalGross:null;
+  window.receiptTotalGross=currentReceiptTotal;
   updateProfit();
 
   dashReceiptCount.textContent=String(rows.length);
