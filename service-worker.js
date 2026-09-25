@@ -1,1 +1,47 @@
-const CACHE="ts-verwaltung-v3";const ASSETS=["./","./admin.html","./admin.js","./style.css","./config.js","./manifest.json","./icon.svg","./pwa.js"];self.addEventListener("install",e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)));self.skipWaiting()});self.addEventListener("activate",e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==CACHE).map(x=>caches.delete(x)))).then(()=>self.clients.claim()))});self.addEventListener("fetch",e=>{if(e.request.method!=="GET"||new URL(e.request.url).origin!==location.origin)return;e.respondWith(fetch(e.request).then(r=>{const c=r.clone();caches.open(CACHE).then(x=>x.put(e.request,c));return r}).catch(()=>caches.match(e.request)))})
+const CACHE='ts-admin-gold-v1';
+const SHELL=[
+  './',
+  './admin.html',
+  './admin-style.css',
+  './admin.js',
+  './config.js',
+  './manifest.json',
+  './icon.svg',
+  './pwa.js',
+  './logo-fahrzeugpflege.png',
+  './logo-serviceleistungen.png'
+];
+
+self.addEventListener('install',event=>{
+  event.waitUntil(
+    caches.open(CACHE)
+      .then(cache=>cache.addAll(SHELL))
+      .then(()=>self.skipWaiting())
+  );
+});
+
+self.addEventListener('activate',event=>{
+  event.waitUntil(
+    caches.keys()
+      .then(keys=>Promise.all(
+        keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))
+      ))
+      .then(()=>self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch',event=>{
+  if(event.request.method!=='GET') return;
+  const url=new URL(event.request.url);
+  if(url.origin!==location.origin) return;
+
+  event.respondWith(
+    fetch(event.request)
+      .then(response=>{
+        const copy=response.clone();
+        caches.open(CACHE).then(cache=>cache.put(event.request,copy));
+        return response;
+      })
+      .catch(()=>caches.match(event.request).then(r=>r||caches.match('./admin.html')))
+  );
+});

@@ -4,12 +4,26 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>T.S. Serviceleistungen – Admin</title>
-<link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="admin-style.css?v=gold2">
+<meta name="theme-color" content="#090909">
 </head>
 <body>
-<header>
-  <a class="brand" href="index.html"><span>TS</span><b>T.S. SERVICELEISTUNGEN · ADMIN</b></a>
-  <button id="logout">Abmelden</button>
+<header class="admin-header">
+  <div class="header-logo header-logo-left">
+    <img src="logo-fahrzeugpflege.png" alt="T.S. Fahrzeugpflege &amp; Technik">
+  </div>
+  <a class="admin-brand" href="index.html">
+    <strong>T.S. SERVICELEISTUNGEN</strong>
+    <span>ADMIN</span>
+  </a>
+  <div class="header-logo header-logo-right">
+    <img src="logo-serviceleistungen.png" alt="T.S. Serviceleistungen">
+  </div>
+  <div class="header-actions">
+    <button id="installApp" class="install-btn" type="button">＋ App installieren</button>
+    <button id="logout" class="logout-btn">Abmelden</button>
+  </div>
 </header>
 
 <main>
@@ -30,11 +44,11 @@
       <button id="refresh" class="primary">Aktualisieren</button>
     </div>
 
-    <nav id="adminNav" style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px">
-      <button type="button" class="primary" data-nav="dashboard">Dashboard</button>
-      <button type="button" data-nav="requests">Terminanfragen</button>
-      <button type="button" data-nav="receipts">Belege</button>
-      <a href="https://ts-serviceleistungen.github.io/ts-kalender/" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;padding:8px 14px;border:1px solid #ccc;border-radius:8px;text-decoration:none;color:inherit;background:#fff">TS-Kalender</a>
+    <nav id="adminNav" class="admin-nav">
+      <button type="button" class="primary" data-nav="dashboard">⌂&nbsp; Dashboard</button>
+      <button type="button" data-nav="requests">▣&nbsp; Terminanfragen</button>
+      <button type="button" data-nav="receipts">▤&nbsp; Belege</button>
+      <a class="nav-link" href="https://ts-serviceleistungen.github.io/ts-kalender/" target="_blank" rel="noopener">▦&nbsp; TS-Kalender</a>
     </nav>
 
     <section id="dashboardHome">
@@ -55,12 +69,12 @@
         <div><b id="dashProfit">—</b><small>Gewinn · Einnahmen minus Ausgaben</small></div>
       </div>
 
-      <section class="panel" style="margin-top:20px">
+      <section class="panel quick-panel" style="margin-top:20px">
         <div class="head"><b>Schnellzugriff</b><span id="user"></span></div>
         <div style="display:flex;flex-wrap:wrap;gap:10px">
           <button type="button" class="primary" data-nav="requests">Terminanfragen öffnen</button>
           <button type="button" data-nav="receipts">Belege öffnen</button>
-          <a href="https://ts-serviceleistungen.github.io/ts-kalender/" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;padding:8px 14px;border:1px solid #ccc;border-radius:8px;text-decoration:none;color:inherit;background:#fff">TS-Kalender öffnen</a>
+          <a class="nav-link" href="https://ts-serviceleistungen.github.io/ts-kalender/" target="_blank" rel="noopener">TS-Kalender öffnen&nbsp; →</a>
         </div>
       </section>
     </section>
@@ -126,7 +140,7 @@
         </form>
       </section>
 
-      <section class="panel" style="margin-top:20px">
+      <section class="panel quick-panel" style="margin-top:20px">
         <div class="head"><b>Alle Belege</b></div>
         <div id="receiptList"><p>Belege werden geladen...</p></div>
       </section>
@@ -145,9 +159,19 @@
   </div>
 </div>
 
+<div id="installHelp" class="install-help hidden">
+  <div class="install-help-card">
+    <button id="closeInstallHelp" class="close" type="button">×</button>
+    <small>T.S. SERVICELEISTUNGEN</small>
+    <h2>App auf dem Handy installieren</h2>
+    <p id="installHelpText">Die Verwaltung kann als App auf dem Startbildschirm abgelegt werden.</p>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="admin.js?v=belegupload3"></script>
+<script src="admin.js?v=belegupload4"></script>
+<script src="pwa.js?v=2"></script>
 </body>
 </html>

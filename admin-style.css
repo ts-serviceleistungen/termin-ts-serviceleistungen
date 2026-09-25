@@ -150,3 +150,15 @@ input:focus,select:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(214,
   .row button{margin-top:6px}
   h1{font-size:28px}
 }
+
+
+/* PWA installation */
+.header-actions{position:absolute;right:34px;bottom:20px;z-index:3;display:flex;gap:8px;align-items:center}
+.install-btn{border:1px solid var(--gold)!important;border-radius:10px;background:rgba(0,0,0,.72)!important;color:var(--gold-light)!important;padding:9px 15px;font-weight:700;cursor:pointer}
+.install-btn:hover{background:var(--gold)!important;color:#080808!important;box-shadow:0 0 20px rgba(214,175,69,.25)}
+.header-actions .logout-btn{position:static}
+.install-help{position:fixed;inset:0;background:rgba(0,0,0,.78);display:grid;place-items:center;padding:20px;z-index:100;backdrop-filter:blur(8px)}
+.install-help-card{position:relative;width:min(460px,100%);padding:26px;border:1px solid var(--gold);border-radius:16px;background:#0b0b0b;color:#fff;box-shadow:0 30px 100px rgba(0,0,0,.8)}
+.install-help-card h2{margin:8px 0 10px}.install-help-card p{color:#cfcfcf;line-height:1.5}.install-help-card .close{position:absolute;right:14px;top:14px}
+@media(max-width:1050px){.header-actions{right:20px;bottom:10px}.admin-header{padding-bottom:58px}}
+@media(max-width:700px){.header-actions{right:12px;bottom:10px;gap:6px}.install-btn,.logout-btn{font-size:12px!important;padding:7px 10px!important}.admin-header{padding-bottom:50px}}
