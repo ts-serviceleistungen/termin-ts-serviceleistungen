@@ -54,10 +54,20 @@ let personalCalendarEvents=[];
 let adminCalendarDate=new Date();
 let adminCalendarView='month';
 
+// Google-Rechnungs-/Finanzschnittstelle
+const INVOICE_TOTAL_URL='https://script.google.com/macros/s/AKfycbziO0qeGhs0URutEScjmDNF3tUPGiefZW37s6JxOQSJoY1PHpt2LwxzRQCxC0AMgX0q/exec';
+const dashInvoiceGross=document.getElementById('dashInvoiceGross');
+const dashInvoiceMonth=document.getElementById('dashInvoiceMonth');
+const dashProfit=document.getElementById('dashProfit');
+const dashProfitMonth=document.getElementById('dashProfitMonth');
+const financialYearLabel=document.getElementById('financialYearLabel');
+const financialMonthLabel=document.getElementById('financialMonthLabel');
+const financialMonthlyTable=document.getElementById('financialMonthlyTable');
+
 function escapeHtml(value){return String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;')}
 function formatDate(value){if(!value)return '—';const d=new Date(value+'T00:00:00');return Number.isNaN(d.getTime())?value:d.toLocaleDateString('de-DE')}
 function showLoginMessage(message){loginMsg.textContent=message;loginMsg.classList.remove('hidden')}
-async function init(){const {data,error}=await db.auth.getSession();if(error){showLoginMessage(error.message);return}const session=data.session;if(!session){loginEl.classList.remove('hidden');dashEl.classList.add('hidden');return}loginEl.classList.add('hidden');dashEl.classList.remove('hidden');userEl.textContent=session.user.email||'';showView('dashboard');ensureAdminCalendarUI();await load();await loadReceipts()}
+async function init(){const {data,error}=await db.auth.getSession();if(error){showLoginMessage(error.message);return}const session=data.session;if(!session){loginEl.classList.remove('hidden');dashEl.classList.add('hidden');return}loginEl.classList.add('hidden');dashEl.classList.remove('hidden');userEl.textContent=session.user.email||'';showView('dashboard');ensureAdminCalendarUI();await load();await loadReceipts();await loadFinancials()}
 async function load(){
   listEl.innerHTML='<p>Aktualisiere Anfragen...</p>';
   const {data,error}=await db.from('requests').select('*').order('created_at',{ascending:false});
@@ -98,6 +108,25 @@ function ensureAdminCalendarUI(){
   wrap.id='adminCalendar';
   wrap.className='panel';
   wrap.style.marginBottom='20px';
+  if(!document.getElementById('adminCalendarDarkStyle')){
+    const style=document.createElement('style');
+    style.id='adminCalendarDarkStyle';
+    style.textContent=`
+      #adminCalendar{background:#0b0b0b!important;color:#f5f5f5!important;border-color:#8a6a1f!important}
+      #adminCalendar .head{background:transparent!important;color:#fff!important}
+      #adminCalTitle{color:#d6b55a!important}
+      #adminCalGrid{color:#fff!important}
+      #adminCalGrid > div{background:#0b0b0b!important;color:#f5f5f5!important}
+      #adminCalGrid .admin-cal-day{background:#111!important;color:#fff!important;border-color:#6d5317!important}
+      #adminCalGrid .admin-cal-day:hover{background:#1a1710!important;border-color:#c49b36!important}
+      #adminCalGrid .admin-cal-day > div:first-child{color:#d6b55a!important}
+      #adminCalGrid .admin-cal-event{color:#fff!important;background-color:rgba(255,255,255,.04)!important}
+      #adminCalGrid .admin-cal-event[data-kind="customer"]{color:#fff!important}
+      #adminCalGrid button{color:#fff!important}
+      #adminCalGrid button:hover{color:#fff!important}
+    `;
+    document.head.appendChild(style);
+  }
   wrap.innerHTML=`
     <div class="head" style="flex-wrap:wrap;gap:10px">
       <div><b>Admin-Kalender</b><small id="adminCalendarSummary" style="display:block;margin-top:4px">Termine</small></div>
@@ -218,7 +247,7 @@ function renderAdminCalendar(){
       const key=`${y}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
       const dayItems=items.filter(x=>x.date===key);
       const today=key===adminDateKey(new Date());
-      html+=`<button type="button" class="admin-cal-day" data-cal-day="${key}" style="min-height:92px;text-align:left;padding:7px;border:1px solid ${today?'#b08a2e':'#ddd'};border-radius:8px;background:${today?'rgba(176,138,46,.08)':'#fff'};cursor:pointer">`;
+      html+=`<button type="button" class="admin-cal-day" data-cal-day="${key}" style="min-height:92px;text-align:left;padding:7px;border:1px solid ${today?'#b08a2e':'#ddd'};border-radius:8px;background:${today?'rgba(176,138,46,.10)':'#111'};color:#fff;cursor:pointer">`;
       html+=`<div style="font-weight:700;margin-bottom:5px">${day}</div>`;
       dayItems.slice(0,4).forEach(x=>html+=`<div class="admin-cal-event" data-kind="${x.kind}" data-id="${escapeHtml(x.id)}" style="${adminEventStyle(x.style)};padding:3px 5px;margin:3px 0;border-radius:4px;font-size:12px;overflow:hidden"><b>${escapeHtml(x.time||'')}</b> ${escapeHtml(x.title)}<br><span>${escapeHtml(x.subtitle)}</span></div>`);
       if(dayItems.length>4)html+=`<div style="font-size:11px">+ ${dayItems.length-4} weitere</div>`;
@@ -230,12 +259,12 @@ function renderAdminCalendar(){
     const start=isDay?new Date(adminCalendarDate):adminStartOfWeek(adminCalendarDate);
     const count=isDay?1:7;
     title.textContent=isDay?adminCalendarDate.toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}):`${start.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})} – ${new Date(start.getFullYear(),start.getMonth(),start.getDate()+6).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'})}`;
-    let html='<div style="display:grid;grid-template-columns:90px repeat('+count+',minmax(0,1fr));border:1px solid #ddd;overflow:auto">';
+    let html='<div style="display:grid;grid-template-columns:90px repeat('+count+',minmax(0,1fr));border:1px solid #6d5317;overflow:auto;background:#0b0b0b;color:#fff">';
     html+='<div></div>';
-    for(let i=0;i<count;i++){const d=new Date(start);d.setDate(d.getDate()+i);html+=`<div style="padding:8px;text-align:center;font-weight:700;border-left:1px solid #ddd">${d.toLocaleDateString('de-DE',{weekday:'short'})}<br>${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.</div>`;}
+    for(let i=0;i<count;i++){const d=new Date(start);d.setDate(d.getDate()+i);html+=`<div style="padding:8px;text-align:center;font-weight:700;border-left:1px solid #4a3a17">${d.toLocaleDateString('de-DE',{weekday:'short'})}<br>${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.</div>`;}
     for(let h=0;h<24;h++){
-      html+=`<div style="min-height:54px;padding:6px;font-size:12px;border-top:1px solid #eee">${String(h).padStart(2,'0')}:00</div>`;
-      for(let i=0;i<count;i++){const d=new Date(start);d.setDate(d.getDate()+i);const key=adminDateKey(d);const slot=items.filter(x=>x.date===key).filter(x=>{const hh=parseInt((x.time||'').slice(0,2),10);return Number.isFinite(hh)&&hh===h;});html+='<div style="min-height:54px;border-left:1px solid #eee;border-top:1px solid #eee;padding:3px">';slot.forEach(x=>html+=`<div class="admin-cal-event" data-kind="${x.kind}" data-id="${escapeHtml(x.id)}" style="${adminEventStyle(x.style)};padding:4px;border-radius:4px;font-size:12px;margin-bottom:3px;cursor:pointer"><b>${escapeHtml(x.time)}</b><br>${escapeHtml(x.title)}<br><span>${escapeHtml(x.subtitle)}</span></div>`);html+='</div>';}
+      html+=`<div style="min-height:54px;padding:6px;font-size:12px;border-top:1px solid #2d281d">${String(h).padStart(2,'0')}:00</div>`;
+      for(let i=0;i<count;i++){const d=new Date(start);d.setDate(d.getDate()+i);const key=adminDateKey(d);const slot=items.filter(x=>x.date===key).filter(x=>{const hh=parseInt((x.time||'').slice(0,2),10);return Number.isFinite(hh)&&hh===h;});html+='<div style="min-height:54px;border-left:1px solid #eee;border-top:1px solid #2d281d;padding:3px">';slot.forEach(x=>html+=`<div class="admin-cal-event" data-kind="${x.kind}" data-id="${escapeHtml(x.id)}" style="${adminEventStyle(x.style)};padding:4px;border-radius:4px;font-size:12px;margin-bottom:3px;cursor:pointer"><b>${escapeHtml(x.time)}</b><br>${escapeHtml(x.title)}<br><span>${escapeHtml(x.subtitle)}</span></div>`);html+='</div>';}
     }
     html+='</div>';grid.innerHTML=html;
   }
@@ -323,6 +352,54 @@ async function deleteRequest(id){
 
 function euro(value){
   return Number(value||0).toLocaleString('de-DE',{style:'currency',currency:'EUR'});
+}
+
+async function loadFinancials(){
+  const year=new Date().getFullYear();
+  const month=new Date().getMonth()+1;
+  if(financialYearLabel)financialYearLabel.textContent=String(year);
+  if(financialMonthLabel)financialMonthLabel.textContent=new Date().toLocaleDateString('de-DE',{month:'long',year:'numeric'});
+
+  let invoiceYear=0;
+  let invoiceMonth=0;
+  let monthlyInvoices=Array.from({length:12},()=>0);
+
+  try{
+    const response=await fetch(`${INVOICE_TOTAL_URL}?v=${year}`,{cache:'no-store'});
+    const result=await response.json().catch(()=>({}));
+    if(!response.ok || result.ok===false)throw new Error(result.error||'Rechnungsdaten konnten nicht geladen werden.');
+    invoiceYear=Number(result.bruttoGesamtJahr||0);
+    invoiceMonth=Number(result.bruttoGesamtMonat||0);
+    if(Array.isArray(result.monatlich))result.monatlich.forEach((v,i)=>{if(i<12)monthlyInvoices[i]=Number(v||0)});
+  }catch(err){
+    console.warn('Rechnungsdaten:',err.message);
+    if(dashInvoiceGross)dashInvoiceGross.textContent='—';
+    if(dashInvoiceMonth)dashInvoiceMonth.textContent='—';
+    if(dashProfit)dashProfit.textContent='—';
+    if(dashProfitMonth)dashProfitMonth.textContent='—';
+    return;
+  }
+
+  const receiptTotals=window.receiptTotals||{year:{gross:0},month:{gross:0}};
+  const expenseYear=Number(receiptTotals.year?.gross||0);
+  const expenseMonth=Number(receiptTotals.month?.gross||0);
+  const profitYear=invoiceYear-expenseYear;
+  const profitMonth=invoiceMonth-expenseMonth;
+
+  if(dashInvoiceGross)dashInvoiceGross.textContent=euro(invoiceYear);
+  if(dashInvoiceMonth)dashInvoiceMonth.textContent=euro(invoiceMonth);
+  if(dashProfit)dashProfit.textContent=euro(profitYear);
+  if(dashProfitMonth)dashProfitMonth.textContent=euro(profitMonth);
+
+  if(financialMonthlyTable){
+    const monthlyExpenses=window.receiptMonthlyTotals||Array.from({length:12},()=>0);
+    financialMonthlyTable.innerHTML=monthlyInvoices.map((income,i)=>{
+      const expense=Number(monthlyExpenses[i]||0);
+      const profit=income-expense;
+      const name=new Date(year,i,1).toLocaleDateString('de-DE',{month:'long'});
+      return `<tr><td>${escapeHtml(name)}</td><td>${euro(income)}</td><td>${euro(expense)}</td><td>${euro(profit)}</td></tr>`;
+    }).join('');
+  }
 }
 
 function showReceiptMsg(message, error=false){
@@ -524,6 +601,7 @@ async function saveReceipt(){
     receiptDate.value=new Date().toLocaleDateString('sv-SE');
     showReceiptMsg('Beleg erfolgreich gespeichert.');
     await loadReceipts();
+      await loadFinancials();
   }catch(err){
     showReceiptMsg('Beleg konnte nicht gespeichert werden: '+err.message,true);
   }
@@ -546,6 +624,7 @@ async function deleteReceipt(id){
   const result=await db.from('receipts').delete().eq('id',id);
   if(result.error){alert('Beleg konnte nicht gelöscht werden: '+result.error.message);return;}
   await loadReceipts();
+  await loadFinancials();
 }
 
 function showView(view){
@@ -603,6 +682,7 @@ refreshBtn.addEventListener('click',async()=>{
   refreshBtn.textContent='Aktualisiere…';
   try{
     await Promise.all([load(),loadReceipts()]);
+    await loadFinancials();
   }finally{
     refreshBtn.disabled=false;
     refreshBtn.textContent='Aktualisieren';
