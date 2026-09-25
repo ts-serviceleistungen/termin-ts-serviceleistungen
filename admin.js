@@ -72,7 +72,7 @@ const dashProfitMonth = document.getElementById('dashProfitMonth');
 const financialYearLabel = document.getElementById('financialYearLabel');
 const financialMonthLabel = document.getElementById('financialMonthLabel');
 const financialMonthlyTable = document.getElementById('financialMonthlyTable');
-const RECHNUNGS_API_URL = 'https://script.google.com/macros/s/AKfycbziO0qeGhs0URutEScjmDNF3tUPGiefZW37s6JxOQSJoY1PHpt2LwxzRQCxC0AMgX0q/exec';
+const INVOICE_TOTAL_URL = 'https://script.google.com/macros/s/AKfycbziO0qeGhs0URutEScjmDNF3tUPGiefZW37s6JxOQSJoY1PHpt2LwxzRQCxC0AMgX0q/exec';
 let appointmentDate = new Date();
 let appointmentView = 'day';
 let calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -445,7 +445,7 @@ async function loadFinancials(){
   let monthlyInvoices = Array.from({length:12},()=>0);
 
   try{
-    const response = await fetch(`${RECHNUNGS_API_URL}?v=${year}`,{cache:'no-store'});
+    const response = await fetch(`${INVOICE_TOTAL_URL}?v=${year}`,{cache:'no-store'});
     const result = await response.json().catch(()=>({}));
     if(!response.ok || result.ok===false) throw new Error(result.error||'Rechnungsdaten konnten nicht geladen werden.');
     invoiceYear = Number(result.bruttoGesamtJahr||0);
