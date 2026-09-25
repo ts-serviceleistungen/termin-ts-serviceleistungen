@@ -86,7 +86,7 @@
           <label>Dokument auswählen
             <input id="receiptImage" type="file" accept="image/*,application/pdf" capture="environment" required>
           </label>
-          <p class="notice" style="margin:0">📤 Ein Klick auf „Beleg / Rechnung hochladen“ öffnet auf PC und Smartphone die Dateiauswahl. Bilder werden automatisch per OCR ausgewertet; PDFs werden archiviert.</p>
+          <p class="notice" style="margin:0">📤 Ein Klick auf „Beleg / Rechnung hochladen“ öffnet auf PC und Smartphone die Dateiauswahl. Bilder und PDFs werden automatisch per KI ausgewertet; bei PDFs wird die erste Seite analysiert.</p>
           <p id="ocrMsg" class="notice hidden"></p>
           <label>Datum
             <input id="receiptDate" type="date" required>
@@ -147,6 +147,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
-<script src="admin.js?v=belegupload1"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="admin.js?v=belegupload3"></script>
 </body>
 </html>

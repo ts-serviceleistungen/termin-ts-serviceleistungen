@@ -258,18 +258,45 @@ function fileToDataUrl(file){
   });
 }
 
+async function pdfFirstPageToDataUrl(file){
+  if(typeof pdfjsLib==='undefined'){
+    throw new Error('Die PDF-Bibliothek konnte nicht geladen werden. Bitte die Seite einmal mit Strg+F5 neu laden.');
+  }
+
+  const buffer=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:buffer}).promise;
+  const page=await pdf.getPage(1);
+  const viewport=page.getViewport({scale:2});
+
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.ceil(viewport.width);
+  canvas.height=Math.ceil(viewport.height);
+  const ctx=canvas.getContext('2d',{alpha:false});
+
+  await page.render({canvasContext:ctx,viewport}).promise;
+  return canvas.toDataURL('image/jpeg',0.88);
+}
+
+async function fileToOcrDataUrl(file){
+  if(file.type.startsWith('image/')){
+    return fileToDataUrl(file);
+  }
+
+  if(file.type==='application/pdf' || file.name.toLowerCase().endsWith('.pdf')){
+    showOcrMsg('PDF wird für die KI vorbereitet…');
+    return pdfFirstPageToDataUrl(file);
+  }
+
+  throw new Error('Dieser Dateityp kann nicht automatisch per KI ausgewertet werden. Bitte JPG, PNG oder PDF verwenden.');
+}
+
 async function recognizeReceipt(){
   const file=receiptImage.files?.[0];
   if(!file)return;
 
-  if(!file.type.startsWith('image/')){
-    showOcrMsg('PDF erkannt. Die Datei wird archiviert; automatische OCR ist für PDF in dieser Version nicht aktiviert. Bitte Datum und Bruttobetrag kontrollieren/eintragen.');
-    return;
-  }
-
-  showOcrMsg('Beleg wird automatisch erkannt…');
+  showOcrMsg('Beleg wird automatisch von der KI ausgewertet…');
   try{
-    const dataUrl=await fileToDataUrl(file);
+    const dataUrl=await fileToOcrDataUrl(file);
     const {data:{session}}=await db.auth.getSession();
     if(!session)throw new Error('Deine Anmeldung ist abgelaufen. Bitte erneut anmelden.');
 
