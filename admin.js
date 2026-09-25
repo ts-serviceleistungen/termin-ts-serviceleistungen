@@ -28,6 +28,10 @@ const dashYearGross = document.getElementById('dashYearGross');
 const dashMonthGross = document.getElementById('dashMonthGross');
 const dashInvoiceGross = document.getElementById('dashInvoiceGross');
 const dashProfit = document.getElementById('dashProfit');
+const dashYearCash = document.getElementById('dashYearCash');
+const dashYearCard = document.getElementById('dashYearCard');
+const dashYearTotal = document.getElementById('dashYearTotal');
+const dashMonthTotal = document.getElementById('dashMonthTotal');
 
 const INVOICE_TOTAL_URL = 'https://script.google.com/macros/s/AKfycbziO0qeGhs0URutEScjmDNF3tUPGiefZW37s6JxOQSJoY1PHpt2LwxzRQCxC0AMgX0q/exec';
 const BELEG_UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbziO0qeGhs0URutEScjmDNF3tUPGiefZW37s6JxOQSJoY1PHpt2LwxzRQCxC0AMgX0q/exec';
