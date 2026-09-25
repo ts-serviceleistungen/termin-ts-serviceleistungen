@@ -441,6 +441,16 @@ async function loadReceipts(){
   const yearGross=sumGross(yearRows);
   const monthGross=sumGross(monthRows);
 
+  // Monatliche Beleg-/Ausgabensummen für die Finanzübersicht (Jan–Dez).
+  const monthlyExpenses=Array.from({length:12},()=>0);
+  yearRows.forEach(r=>{
+    const d=String(r.receipt_date||'').split('-');
+    const m=Number(d[1]);
+    const amount=Number(String(r.gross_amount??0).replace(',','.'));
+    if(m>=1 && m<=12 && Number.isFinite(amount)) monthlyExpenses[m-1]+=amount;
+  });
+  window.receiptMonthlyTotals=monthlyExpenses;
+
   // Separate Summen für Bar und EC/Karte. Diese sind zusätzlich
   // zum Gesamtbetrag verfügbar, ohne den Gesamtbetrag zu verändern.
   const yearCash=sumGross(yearRows.filter(r=>r.payment_method==='Bar'));
