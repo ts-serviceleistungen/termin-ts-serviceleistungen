@@ -355,9 +355,19 @@ async function saveReceipt(){
     return;
   }
 
-  const gross=Number(String(receiptGross.value).replace(',','.'));
+  // Der Bruttobetrag muss beim ersten Klick noch nicht vorhanden sein.
+  // Wenn es sich um ein Bild handelt, wird die vorhandene OCR automatisch
+  // ausgeführt und der erkannte Betrag anschließend geprüft.
+  let gross=Number(String(receiptGross.value||'').replace(',','.'));
   if(!Number.isFinite(gross)||gross<0){
-    showReceiptMsg('Bitte einen gültigen Bruttobetrag eingeben.',true);
+    if(file.type.startsWith('image/')){
+      await recognizeReceipt();
+      gross=Number(String(receiptGross.value||'').replace(',','.'));
+    }
+  }
+
+  if(!Number.isFinite(gross)||gross<0){
+    showReceiptMsg('Der Bruttobetrag konnte noch nicht erkannt werden. Bitte kurz die OCR abwarten oder den Betrag manuell eintragen.',true);
     return;
   }
 
