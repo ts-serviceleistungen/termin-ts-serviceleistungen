@@ -64,10 +64,24 @@
         <div><b id="dashMonthGross">0,00 €</b><small>Ausgaben diesen Monat · brutto</small></div>
       </div>
 
-      <div class="stats" style="margin-top:16px">
-        <div><b id="dashInvoiceGross">—</b><small>Rechnungen · Brutto gesamt</small></div>
-        <div><b id="dashProfit">—</b><small>Gewinn · Einnahmen minus Ausgaben</small></div>
+      <div class="stats financial-stats" style="margin-top:16px">
+        <div><b id="dashInvoiceGross">0,00 €</b><small>Rechnungen dieses Jahr · brutto <span id="financialYearLabel"></span></small></div>
+        <div><b id="dashProfit">0,00 €</b><small>Gewinn dieses Jahr · brutto</small></div>
+        <div><b id="dashInvoiceMonth">0,00 €</b><small>Rechnungen diesen Monat · brutto</small></div>
+        <div><b id="dashProfitMonth">0,00 €</b><small>Gewinn diesen Monat · brutto</small></div>
       </div>
+
+      <section class="panel financial-panel" style="margin-top:20px">
+        <div class="head"><b>Finanzübersicht <span id="financialMonthLabel"></span></b></div>
+        <div class="financial-table-wrap">
+          <table class="financial-table">
+            <thead>
+              <tr><th>Monat</th><th>Einnahmen</th><th>Ausgaben</th><th>Gewinn</th></tr>
+            </thead>
+            <tbody id="financialMonthlyTable"></tbody>
+          </table>
+        </div>
+      </section>
 
       <section class="panel quick-panel" style="margin-top:20px">
         <div class="head"><b>Schnellzugriff</b><span id="user"></span></div>
@@ -85,6 +99,42 @@
         <div><b id="open">0</b><small>Offen</small></div>
         <div><b id="today">0</b><small>Heute</small></div>
       </div>
+
+      <section class="panel calendar-panel" style="margin-top:20px">
+        <div class="head">
+          <div><b>Admin-Kalender</b><small id="appointmentSummary" style="display:block">Termine</small></div>
+          <div class="calendar-toolbar">
+            <button type="button" id="appointmentToday">Heute</button>
+            <button type="button" id="appointmentPrev">‹</button>
+            <button type="button" id="appointmentNext">›</button>
+          </div>
+        </div>
+        <div class="calendar-view-buttons">
+          <button type="button" class="appt-view active" data-view="day">Tag</button>
+          <button type="button" class="appt-view" data-view="week">Woche</button>
+          <button type="button" class="appt-view" data-view="month">Monat</button>
+        </div>
+        <h3 id="appointmentTitle" class="appointment-title"></h3>
+        <div id="appointmentOverview"></div>
+      </section>
+
+      <section class="panel calendar-filter-panel">
+        <div class="calendar-filter-grid">
+          <input id="searchFilter" type="search" placeholder="Kunde, Fahrzeug, Leistung …">
+          <select id="statusFilter">
+            <option value="">Alle Status</option>
+            <option>Neue Anfrage</option><option>Bestätigt</option><option>Alternativtermin</option><option>Abgelehnt</option><option>Abgeschlossen</option>
+          </select>
+          <input id="dateFilter" type="date">
+          <button type="button" id="clearFilters">Filter zurücksetzen</button>
+        </div>
+        <small id="filterCount" class="filter-count">0 von 0</small>
+        <div class="head calendar-month-head">
+          <b id="calendarTitle">Kalender</b>
+          <div class="calendar-toolbar"><button type="button" id="prevMonth">‹</button><button type="button" id="nextMonth">›</button></div>
+        </div>
+        <div id="calendar" class="calendar-grid"></div>
+      </section>
 
       <section class="panel">
         <div class="head"><b>Anfragen</b><span></span></div>

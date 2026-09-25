@@ -50,6 +50,32 @@ const detailTitle = document.getElementById('detailTitle');
 const detailBody = document.getElementById('detailBody');
 const detailActions = document.getElementById('detailActions');
 const closeModal = document.getElementById('closeModal');
+
+const filterCountEl = document.getElementById('filterCount');
+const searchFilter = document.getElementById('searchFilter');
+const statusFilter = document.getElementById('statusFilter');
+const dateFilter = document.getElementById('dateFilter');
+const clearFiltersBtn = document.getElementById('clearFilters');
+const calendarEl = document.getElementById('calendar');
+const calendarTitleEl = document.getElementById('calendarTitle');
+const prevMonthBtn = document.getElementById('prevMonth');
+const nextMonthBtn = document.getElementById('nextMonth');
+const appointmentOverview = document.getElementById('appointmentOverview');
+const appointmentTitleEl = document.getElementById('appointmentTitle');
+const appointmentSummaryEl = document.getElementById('appointmentSummary');
+const appointmentTodayBtn = document.getElementById('appointmentToday');
+const appointmentPrevBtn = document.getElementById('appointmentPrev');
+const appointmentNextBtn = document.getElementById('appointmentNext');
+const appointmentViewButtons = document.querySelectorAll('.appt-view');
+const dashInvoiceMonth = document.getElementById('dashInvoiceMonth');
+const dashProfitMonth = document.getElementById('dashProfitMonth');
+const financialYearLabel = document.getElementById('financialYearLabel');
+const financialMonthLabel = document.getElementById('financialMonthLabel');
+const financialMonthlyTable = document.getElementById('financialMonthlyTable');
+const RECHNUNGS_API_URL = 'https://script.google.com/macros/s/AKfycbwgt0D4wTsK55OhiTS3OGAEN-XzGMDhNXrC7_gbr1MWm4UFzl9fEqKqLZzO2GrGlsw1/exec';
+let appointmentDate = new Date();
+let appointmentView = 'day';
+let calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let requests=[];let selectedRequest=null;
 let currentInvoiceTotal=null;
 let currentReceiptTotal=null;
@@ -57,7 +83,7 @@ let currentReceiptTotal=null;
 function escapeHtml(value){return String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;')}
 function formatDate(value){if(!value)return '—';const d=new Date(value+'T00:00:00');return Number.isNaN(d.getTime())?value:d.toLocaleDateString('de-DE')}
 function showLoginMessage(message){loginMsg.textContent=message;loginMsg.classList.remove('hidden')}
-async function init(){const {data,error}=await db.auth.getSession();if(error){showLoginMessage(error.message);return}const session=data.session;if(!session){loginEl.classList.remove('hidden');dashEl.classList.add('hidden');return}loginEl.classList.add('hidden');dashEl.classList.remove('hidden');userEl.textContent=session.user.email||'';showView('dashboard');await load();await loadReceipts();await loadInvoiceTotal()}
+async function init(){const {data,error}=await db.auth.getSession();if(error){showLoginMessage(error.message);return}const session=data.session;if(!session){loginEl.classList.remove('hidden');dashEl.classList.add('hidden');return}loginEl.classList.add('hidden');dashEl.classList.remove('hidden');userEl.textContent=session.user.email||'';showView('dashboard');await load();await loadReceipts();await loadFinancials()}
 async function load(){
   listEl.innerHTML='<p>Aktualisiere Anfragen...</p>';
   const {data,error}=await db.from('requests').select('*').order('created_at',{ascending:false});
@@ -77,11 +103,6 @@ async function load(){
   dashNew.textContent=newCount;
   dashOpen.textContent=openCount;
   dashToday.textContent=todayCount;
-
-  // Belege werden in einem späteren Schritt an dieselbe Oberfläche angebunden.
-  dashReceiptCount.textContent='0';
-  dashYearGross.textContent='0,00 €';
-  dashMonthGross.textContent='0,00 €';
 
   if(!requests.length){
     listEl.innerHTML='<p>Keine Anfragen vorhanden.</p>';
@@ -154,37 +175,309 @@ async function deleteRequest(id){
   }
 }
 
+function appointmentDateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function appointmentDateFromKey(value) {
+  if (!value) return new Date();
+  const [y, m, d] = value.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function startOfWeek(date) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const monday = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - monday);
+  return d;
+}
+
+function isAppointmentVisible(r) {
+  return !!r.requested_date && normalizeStatus(r.status) !== 'Abgelehnt';
+}
+
+function sortedAppointments(items) {
+  return items.slice().sort((a, b) => {
+    const ad = `${a.requested_date || ''} ${a.requested_time || '99:99'}`;
+    const bd = `${b.requested_date || ''} ${b.requested_time || '99:99'}`;
+    return ad.localeCompare(bd) || String(a.last_name || '').localeCompare(String(b.last_name || ''));
+  });
+}
+
+function appointmentCard(r, showDate = true) {
+  const status = normalizeStatus(r.status);
+  const dateText = formatDate(r.requested_date);
+  const timeText = r.requested_time || 'Keine Uhrzeit';
+  const vehicle = r.service_type === 'Gartenarbeiten'
+    ? 'Gartenarbeiten'
+    : ([r.make, r.model].filter(Boolean).join(' ') || r.vehicle_type || 'Fahrzeug');
+  const cardStyle = r.service_type === 'Gartenarbeiten'
+    ? 'border-left:5px solid #39a852;background:rgba(57,168,82,.10)'
+    : (r.service_type === 'Fahrzeugpflege'
+      ? 'border-left:5px solid #e58bb1;background:rgba(229,139,177,.10)'
+      : 'border-left:5px solid #999');
+  return `
+    <div class="appointment-card" style="${cardStyle}">
+      <div class="appointment-time">
+        <b>${escapeHtml(timeText)}</b>
+        ${showDate ? `<small>${escapeHtml(dateText)}</small>` : ''}
+      </div>
+      <div class="appointment-main">
+        <b>${escapeHtml(`${r.first_name || ''} ${r.last_name || ''}`.trim() || 'Unbekannter Kunde')}</b>
+        <span>${escapeHtml(vehicle)} · ${escapeHtml(r.service_type || 'Leistung')}</span>
+        <small>${escapeHtml(r.phone || '')} ${r.plate ? `· ${escapeHtml(r.plate)}` : ''}</small>
+      </div>
+      <div class="appointment-actions">
+        <span class="badge status-${escapeHtml(status.replaceAll(' ', '-'))}">${escapeHtml(status)}</span>
+        <button type="button" data-appt-action="details" data-id="${r.id}">Details</button>
+        <button type="button" data-appt-action="move" data-id="${r.id}">Termin ändern</button>
+        ${status !== 'Abgeschlossen' ? `<button type="button" data-appt-action="complete" data-id="${r.id}">Erledigt</button>` : ''}
+      </div>
+    </div>`;
+}
+
+function renderAppointments() {
+  if (!appointmentOverview) return;
+  const all = sortedAppointments(requests.filter(isAppointmentVisible));
+  appointmentSummaryEl.textContent = `${all.length} Termine mit Datum`;
+
+  let title = '';
+  let visible = [];
+  let showDate = true;
+
+  if (appointmentView === 'day') {
+    const key = appointmentDateKey(appointmentDate);
+    title = appointmentDate.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+    visible = all.filter(r => r.requested_date === key);
+    showDate = false;
+  } else if (appointmentView === 'week') {
+    const start = startOfWeek(appointmentDate);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    title = `${start.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} – ${end.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
+    const startKey = appointmentDateKey(start), endKey = appointmentDateKey(end);
+    visible = all.filter(r => r.requested_date >= startKey && r.requested_date <= endKey);
+  } else {
+    title = appointmentDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+    const monthKey = `${appointmentDate.getFullYear()}-${String(appointmentDate.getMonth() + 1).padStart(2, '0')}`;
+    visible = all.filter(r => String(r.requested_date || '').startsWith(monthKey));
+  }
+
+  appointmentTitleEl.textContent = title.charAt(0).toUpperCase() + title.slice(1);
+
+  if (appointmentView === 'month') {
+    if (!visible.length) {
+      appointmentOverview.innerHTML = '<div class="appointment-empty">Keine Termine in diesem Zeitraum.</div>';
+      return;
+    }
+    const grouped = {};
+    visible.forEach(r => { (grouped[r.requested_date] ||= []).push(r); });
+    appointmentOverview.innerHTML = Object.keys(grouped).sort().map(key => `
+      <div class="appointment-day-group">
+        <h3>${escapeHtml(formatDate(key))}</h3>
+        ${sortedAppointments(grouped[key]).map(r => appointmentCard(r, false)).join('')}
+      </div>`).join('');
+  } else if (appointmentView === 'day') {
+    renderDayTimeline(visible);
+  } else {
+    if (!visible.length) {
+      appointmentOverview.innerHTML = '<div class="appointment-empty">Keine Termine in diesem Zeitraum.</div>';
+      return;
+    }
+    appointmentOverview.innerHTML = visible.map(r => appointmentCard(r, showDate)).join('');
+  }
+}
+
+function renderDayTimeline(items) {
+  const sorted = sortedAppointments(items);
+  const withTime = sorted.filter(r => /^\d{2}:\d{2}$/.test(r.requested_time || ''));
+  const withoutTime = sorted.filter(r => !/^\d{2}:\d{2}$/.test(r.requested_time || ''));
+  const startHour = 7;
+  const endHour = 20;
+  const byHour = {};
+  withTime.forEach(r => {
+    const hour = Number(r.requested_time.slice(0, 2));
+    const minute = Number(r.requested_time.slice(3, 5));
+    const key = `${String(hour).padStart(2, '0')}:00`;
+    (byHour[key] ||= []).push(r);
+    r.__minute = minute;
+  });
+
+  let html = '';
+  for (let hour = startHour; hour <= endHour; hour++) {
+    const key = `${String(hour).padStart(2, '0')}:00`;
+    const entries = byHour[key] || [];
+    html += `
+      <div class="day-slot ${entries.length ? 'has-appointments' : ''}">
+        <div class="day-slot-time">${key}</div>
+        <div class="day-slot-content">
+          ${entries.length ? entries.sort((a,b) => (a.__minute || 0) - (b.__minute || 0)).map(r => appointmentCard(r, false)).join('') : '<span class="day-slot-empty">frei</span>'}
+        </div>
+      </div>`;
+  }
+
+  if (withoutTime.length) {
+    html += `
+      <div class="day-slot has-appointments no-time">
+        <div class="day-slot-time">—</div>
+        <div class="day-slot-content">
+          <div class="day-slot-label">Termine ohne Uhrzeit</div>
+          ${withoutTime.map(r => appointmentCard(r, false)).join('')}
+        </div>
+      </div>`;
+  }
+
+  appointmentOverview.innerHTML = html || '<div class="appointment-empty">Keine Termine für diesen Tag.</div>';
+}
+
+async function moveAppointment(id) {
+  const r = requests.find(x => x.id === id);
+  if (!r) return;
+  const date = prompt('Neues Datum (TT.MM.JJJJ oder JJJJ-MM-TT):', formatDate(r.requested_date));
+  if (date === null) return;
+  const normalized = /^\d{2}\.\d{2}\.\d{4}$/.test(date)
+    ? `${date.slice(6)}-${date.slice(3,5)}-${date.slice(0,2)}`
+    : date;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    alert('Bitte ein gültiges Datum eingeben.');
+    return;
+  }
+  const time = prompt('Neue Uhrzeit (z. B. 09:30):', r.requested_time || '');
+  if (time === null) return;
+  if (time && !/^\d{2}:\d{2}$/.test(time)) {
+    alert('Bitte die Uhrzeit im Format HH:MM eingeben.');
+    return;
+  }
+  const ok = await updateRequest(id, { requested_date: normalized, requested_time: time || r.requested_time }, null);
+  if (ok) {
+    alert('Termin wurde geändert.');
+    renderAppointments();
+  }
+}
+
+async function completeAppointment(id) {
+  if (!confirm('Soll dieser Termin als erledigt markiert werden?')) return;
+  await updateRequest(id, { status: 'Abgeschlossen' }, null);
+  renderAppointments();
+}
+
+function shiftAppointmentPeriod(direction) {
+  if (appointmentView === 'day') appointmentDate.setDate(appointmentDate.getDate() + direction);
+  else if (appointmentView === 'week') appointmentDate.setDate(appointmentDate.getDate() + direction * 7);
+  else appointmentDate = new Date(appointmentDate.getFullYear(), appointmentDate.getMonth() + direction, 1);
+  renderAppointments();
+}
+
+
+function getCalendarFilteredRequests(){
+  if(!Array.isArray(requests)) return [];
+  const search = searchFilter?.value?.trim().toLowerCase() || '';
+  const status = statusFilter?.value || '';
+  const date = dateFilter?.value || '';
+  return requests.filter(r=>{
+    if(status && normalizeStatus(r.status)!==status) return false;
+    if(date && r.requested_date!==date) return false;
+    if(search){
+      const hay=[r.first_name,r.last_name,r.phone,r.email,r.vehicle_type,r.make,r.model,r.plate,r.service_type,r.status,r.details,r.message].join(' ').toLowerCase();
+      if(!hay.includes(search)) return false;
+    }
+    return true;
+  });
+}
+
+function renderCalendar(){
+  if(!calendarEl) return;
+  const year=calendarMonth.getFullYear();
+  const month=calendarMonth.getMonth();
+  const first=new Date(year,month,1);
+  const daysInMonth=new Date(year,month+1,0).getDate();
+  const mondayOffset=(first.getDay()+6)%7;
+  const todayKey=appointmentDateKey(new Date());
+  const selectedKey=dateFilter?.value||'';
+  const names=['Mo','Di','Mi','Do','Fr','Sa','So'];
+  const eventsByDate={};
+  (requests||[]).filter(isAppointmentVisible).forEach(r=>{
+    if(r.requested_date)(eventsByDate[r.requested_date] ||= []).push(r);
+  });
+  let html=names.map(n=>`<div class="calendar-weekday">${n}</div>`).join('');
+  for(let i=0;i<mondayOffset;i++) html+='<div class="calendar-day empty"></div>';
+  for(let day=1;day<=daysInMonth;day++){
+    const key=appointmentDateKey(new Date(year,month,day));
+    const entries=eventsByDate[key]||[];
+    const dots=entries.slice(0,6).map(r=>{
+      const st=String(r.service_type||'').toLowerCase();
+      const cls=st.includes('garten')?'garden':st.includes('fahrzeug')?'vehicle':'other';
+      return `<span class="calendar-dot ${cls}" title="${escapeHtml(r.first_name||'')} ${escapeHtml(r.last_name||'')}"></span>`;
+    }).join('');
+    const classes=['calendar-day'];
+    if(key===todayKey)classes.push('today');
+    if(key===selectedKey)classes.push('selected');
+    html+=`<button type="button" class="${classes.join(' ')}" data-calendar-date="${key}"><div class="calendar-day-number">${day}</div>${entries.length?`<div class="calendar-day-count">${entries.length} Termin${entries.length===1?'':'e'}</div><div class="calendar-day-dots">${dots}</div>`:''}</button>`;
+  }
+  calendarEl.innerHTML=html;
+  if(calendarTitleEl)calendarTitleEl.textContent=new Date(year,month,1).toLocaleDateString('de-DE',{month:'long',year:'numeric'});
+  if(filterCountEl)filterCountEl.textContent=`${getCalendarFilteredRequests().length} von ${requests.length}`;
+}
+
+function renderCalendarRequests(){
+  if(!calendarEl) return;
+  const original=requests;
+  const filtered=getCalendarFilteredRequests();
+  if(filterCountEl) filterCountEl.textContent=`${filtered.length} von ${original.length}`;
+  requests=filtered;
+  renderCalendar();
+  renderAppointments();
+  requests=original;
+}
+
 function euro(value){
   return Number(value||0).toLocaleString('de-DE',{style:'currency',currency:'EUR'});
 }
 
-function updateProfit(){
-  if(!dashProfit)return;
-  if(!Number.isFinite(currentInvoiceTotal)||!Number.isFinite(currentReceiptTotal)){
-    dashProfit.textContent='—';
+async function loadFinancials(){
+  const year = new Date().getFullYear();
+  const month = new Date().getMonth()+1;
+  if(financialYearLabel) financialYearLabel.textContent = String(year);
+  if(financialMonthLabel) financialMonthLabel.textContent = new Date().toLocaleDateString('de-DE',{month:'long',year:'numeric'});
+
+  let invoiceYear = 0;
+  let invoiceMonth = 0;
+  let monthlyInvoices = Array.from({length:12},()=>0);
+
+  try{
+    const response = await fetch(`${RECHNUNGS_API_URL}?v=${year}`,{cache:'no-store'});
+    const result = await response.json().catch(()=>({}));
+    if(!response.ok || result.ok===false) throw new Error(result.error||'Rechnungsdaten konnten nicht geladen werden.');
+    invoiceYear = Number(result.bruttoGesamtJahr||0);
+    invoiceMonth = Number(result.bruttoGesamtMonat||0);
+    if(Array.isArray(result.monatlich)) result.monatlich.forEach((v,i)=>{if(i<12)monthlyInvoices[i]=Number(v||0)});
+  }catch(err){
+    console.warn('Rechnungsdaten:',err.message);
+    if(dashInvoiceGross) dashInvoiceGross.textContent='—';
+    if(dashInvoiceMonth) dashInvoiceMonth.textContent='—';
+    if(dashProfit) dashProfit.textContent='—';
+    if(dashProfitMonth) dashProfitMonth.textContent='—';
     return;
   }
-  dashProfit.textContent=euro(currentInvoiceTotal-currentReceiptTotal);
-}
 
-async function loadInvoiceTotal(){
-  if(!dashInvoiceGross)return;
-  dashInvoiceGross.textContent='…';
-  try{
-    const response=await fetch(INVOICE_TOTAL_URL,{cache:'no-store'});
-    const result=await response.json().catch(()=>({}));
-    if(!response.ok || !result.ok)throw new Error(result.error||'Rechnungssumme konnte nicht geladen werden.');
-    const bruttoGesamt=Number(result.bruttoGesamt);
-    currentInvoiceTotal=Number.isFinite(bruttoGesamt)?bruttoGesamt:null;
-    window.invoiceTotalGross=currentInvoiceTotal;
-    dashInvoiceGross.textContent=euro(bruttoGesamt);
-    updateProfit();
-  }catch(err){
-    console.warn('Rechnungssumme konnte nicht geladen werden:',err.message);
-    currentInvoiceTotal=null;
-    window.invoiceTotalGross=null;
-    dashInvoiceGross.textContent='—';
-    updateProfit();
+  const receiptTotals = window.receiptTotals || {year:{gross:0},month:{gross:0}};
+  const expenseYear = Number(receiptTotals.year?.gross||0);
+  const expenseMonth = Number(receiptTotals.month?.gross||0);
+  const profitYear = invoiceYear - expenseYear;
+  const profitMonth = invoiceMonth - expenseMonth;
+
+  if(dashInvoiceGross) dashInvoiceGross.textContent=euro(invoiceYear);
+  if(dashInvoiceMonth) dashInvoiceMonth.textContent=euro(invoiceMonth);
+  if(dashProfit) dashProfit.textContent=euro(profitYear);
+  if(dashProfitMonth) dashProfitMonth.textContent=euro(profitMonth);
+
+  if(financialMonthlyTable){
+    financialMonthlyTable.innerHTML=monthlyInvoices.map((income,i)=>{
+      const expense=window.receiptMonthlyTotals?.[i]||0;
+      const profit=income-expense;
+      const name=new Date(year,i,1).toLocaleDateString('de-DE',{month:'long'});
+      return `<tr><td>${escapeHtml(name)}</td><td>${euro(income)}</td><td>${euro(expense)}</td><td>${euro(profit)}</td></tr>`;
+    }).join('');
   }
 }
 
@@ -210,20 +503,51 @@ async function loadReceipts(){
   const now=new Date();
   const year=now.getFullYear();
   const month=now.getMonth()+1;
-  const yearGross=rows.filter(r=>String(r.receipt_date||'').startsWith(String(year))).reduce((s,r)=>s+Number(r.gross_amount||0),0);
-  const monthGross=rows.filter(r=>{
+  const yearRows=rows.filter(r=>String(r.receipt_date||'').startsWith(String(year)));
+  const monthRows=rows.filter(r=>{
     const d=String(r.receipt_date||'').split('-');
     return Number(d[0])===year && Number(d[1])===month;
-  }).reduce((s,r)=>s+Number(r.gross_amount||0),0);
-  const totalGross=rows.reduce((s,r)=>s+Number(r.gross_amount||0),0);
+  });
 
-  currentReceiptTotal=Number.isFinite(totalGross)?totalGross:null;
-  window.receiptTotalGross=currentReceiptTotal;
-  updateProfit();
+  // Der Gesamtbetrag enthält ALLE Zahlungsarten – Bar, EC/Karte,
+  // Überweisung und Sonstiges. Es wird nichts gegeneinander verrechnet.
+  const sumGross=list=>list.reduce((sum,r)=>{
+    const amount=Number(String(r.gross_amount??0).replace(',','.'));
+    return sum+(Number.isFinite(amount)?amount:0);
+  },0);
+
+  const yearGross=sumGross(yearRows);
+  const monthGross=sumGross(monthRows);
+
+  // Separate Summen für Bar und EC/Karte. Diese sind zusätzlich
+  // zum Gesamtbetrag verfügbar, ohne den Gesamtbetrag zu verändern.
+  const yearCash=sumGross(yearRows.filter(r=>r.payment_method==='Bar'));
+  const yearCard=sumGross(yearRows.filter(r=>r.payment_method==='EC/Karte'));
+  const monthCash=sumGross(monthRows.filter(r=>r.payment_method==='Bar'));
+  const monthCard=sumGross(monthRows.filter(r=>r.payment_method==='EC/Karte'));
+
+  // Monatliche Brutto-Ausgaben für die Finanzübersicht.
+  window.receiptMonthlyTotals=Array.from({length:12},()=>0);
+  yearRows.forEach(r=>{
+    const parts=String(r.receipt_date||'').split('-');
+    const m=Number(parts[1]);
+    const amount=Number(String(r.gross_amount??0).replace(',','.'));
+    if(m>=1 && m<=12 && Number.isFinite(amount)) window.receiptMonthlyTotals[m-1]+=amount;
+  });
 
   dashReceiptCount.textContent=String(rows.length);
   dashYearGross.textContent=euro(yearGross);
   dashMonthGross.textContent=euro(monthGross);
+  if(dashYearCash)dashYearCash.textContent=euro(yearCash);
+  if(dashYearCard)dashYearCard.textContent=euro(yearCard);
+  if(dashYearTotal)dashYearTotal.textContent=euro(yearGross);
+  if(dashMonthTotal)dashMonthTotal.textContent=euro(monthGross);
+
+  // Für spätere Auswertung bereits bereitgestellt.
+  window.receiptTotals={
+    year:{gross:yearGross,cash:yearCash,card:yearCard},
+    month:{gross:monthGross,cash:monthCash,card:monthCard}
+  };
 
   if(!rows.length){
     receiptList.innerHTML='<p>Noch keine Belege vorhanden.</p>';
@@ -525,8 +849,53 @@ receiptList.addEventListener('click',async e=>{
   if(del)return deleteReceipt(del.dataset.receiptDelete);
 });
 
+if(appointmentTodayBtn){
+  appointmentTodayBtn.addEventListener('click',()=>{appointmentDate=new Date();renderAppointments();});
+  appointmentPrevBtn?.addEventListener('click',()=>shiftAppointmentPeriod(-1));
+  appointmentNextBtn?.addEventListener('click',()=>shiftAppointmentPeriod(1));
+  appointmentViewButtons.forEach(btn=>btn.addEventListener('click',()=>{
+    appointmentView=btn.dataset.view;
+    appointmentViewButtons.forEach(x=>x.classList.toggle('active',x===btn));
+    renderAppointments();
+  }));
+}
+appointmentOverview?.addEventListener('click',async e=>{
+  const button=e.target.closest('button[data-appt-action]');
+  if(!button)return;
+  const id=button.dataset.id;
+  const action=button.dataset.apptAction;
+  if(action==='details')return openDetails(id);
+  if(action==='move')return moveAppointment(id);
+  if(action==='complete')return completeAppointment(id);
+});
+searchFilter?.addEventListener('input',renderCalendarRequests);
+statusFilter?.addEventListener('change',renderCalendarRequests);
+dateFilter?.addEventListener('change',renderCalendarRequests);
+clearFiltersBtn?.addEventListener('click',()=>{
+  if(searchFilter)searchFilter.value='';
+  if(statusFilter)statusFilter.value='';
+  if(dateFilter)dateFilter.value='';
+  renderCalendarRequests();
+});
+calendarEl?.addEventListener('click',e=>{
+  const button=e.target.closest('[data-calendar-date]');
+  if(!button)return;
+  if(dateFilter)dateFilter.value=button.dataset.calendarDate;
+  appointmentDate=appointmentDateFromKey(button.dataset.calendarDate);
+  appointmentView='day';
+  appointmentViewButtons.forEach(x=>x.classList.toggle('active',x.dataset.view==='day'));
+  renderCalendarRequests();
+});
+prevMonthBtn?.addEventListener('click',()=>{
+  calendarMonth=new Date(calendarMonth.getFullYear(),calendarMonth.getMonth()-1,1);
+  renderCalendarRequests();
+});
+nextMonthBtn?.addEventListener('click',()=>{
+  calendarMonth=new Date(calendarMonth.getFullYear(),calendarMonth.getMonth()+1,1);
+  renderCalendarRequests();
+});
+
 loginForm.addEventListener('submit',async e=>{e.preventDefault();loginMsg.classList.add('hidden');const {error}=await db.auth.signInWithPassword({email:emailEl.value.trim(),password:passwordEl.value});if(error){showLoginMessage(error.message);return}await init()});
 listEl.addEventListener('click',async e=>{const button=e.target.closest('button[data-action]');if(!button)return;const id=button.dataset.id;const action=button.dataset.action;if(action==='details')return openDetails(id);if(action==='confirm')return confirmRequest(id);if(action==='reject')return rejectRequest(id);if(action==='alternative')return alternativeRequest(id);if(action==='delete')return deleteRequest(id)});
 detailActions.addEventListener('click',async e=>{const button=e.target.closest('button[data-modal-action]');if(!button||!selectedRequest)return;const action=button.dataset.modalAction;if(action==='confirm')await confirmRequest(selectedRequest.id);if(action==='reject')await rejectRequest(selectedRequest.id);if(action==='alternative')await alternativeRequest(selectedRequest.id);if(action==='delete')await deleteRequest(selectedRequest.id)});
-closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',async()=>{refreshBtn.disabled=true;try{await Promise.all([load(),loadReceipts(),loadInvoiceTotal()]);
-    updateProfit();}finally{refreshBtn.disabled=false;}});init();
+closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',async()=>{refreshBtn.disabled=true;try{await Promise.all([load(),loadReceipts(),loadFinancials()]);}finally{refreshBtn.disabled=false;}});init();

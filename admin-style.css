@@ -162,3 +162,44 @@ input:focus,select:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(214,
 .install-help-card h2{margin:8px 0 10px}.install-help-card p{color:#cfcfcf;line-height:1.5}.install-help-card .close{position:absolute;right:14px;top:14px}
 @media(max-width:1050px){.header-actions{right:20px;bottom:10px}.admin-header{padding-bottom:58px}}
 @media(max-width:700px){.header-actions{right:12px;bottom:10px;gap:6px}.install-btn,.logout-btn{font-size:12px!important;padding:7px 10px!important}.admin-header{padding-bottom:50px}}
+
+
+/* Schritt 4 + 5: Admin-Kalender und Finanzübersicht */
+.financial-stats{grid-template-columns:repeat(4,minmax(0,1fr))}
+.financial-panel{overflow:hidden}
+.financial-table-wrap{overflow:auto}
+.financial-table{width:100%;border-collapse:collapse;min-width:620px}
+.financial-table th,.financial-table td{padding:11px 12px;border-bottom:1px solid rgba(255,255,255,.08);text-align:right}
+.financial-table th:first-child,.financial-table td:first-child{text-align:left}
+.financial-table th{color:var(--gold-light);font-size:13px;letter-spacing:.04em}
+.financial-table td{color:#eee}
+.financial-table tbody tr:hover{background:rgba(214,175,69,.055)}
+
+.calendar-toolbar{display:flex;gap:6px;flex-wrap:wrap}
+.calendar-view-buttons{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.calendar-view-buttons button.active{border-color:var(--gold);color:#080808;background:linear-gradient(180deg,#f1ce67,#c49b2f);font-weight:750}
+.appointment-title{margin:8px 0 12px;color:#fff}
+.appointment-summary{color:var(--muted)}
+.appointment-card{display:grid;grid-template-columns:78px 1fr auto;gap:12px;align-items:center;padding:12px;margin-bottom:8px;border:1px solid rgba(255,255,255,.11);border-radius:10px;background:#0c0c0c;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.appointment-card:hover{border-color:rgba(214,175,69,.45)}
+.appointment-time{display:flex;flex-direction:column;color:#fff}
+.appointment-time small{color:var(--muted);margin-top:3px}
+.appointment-main{display:flex;flex-direction:column;gap:3px;min-width:0}
+.appointment-main b{color:#fff}.appointment-main span{color:#ddd}.appointment-main small{color:#999}
+.appointment-actions{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;align-items:center}
+.day-slot{display:grid;grid-template-columns:70px 1fr;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.07)}
+.day-slot-time{font-weight:750;color:var(--gold-light);padding-top:10px}.day-slot-content{min-width:0}.day-slot-empty{opacity:.38;color:#aaa;padding:10px 0;display:block}
+.day-slot-label{color:var(--gold-light);font-weight:700;margin-bottom:7px}.appointment-day-group{margin-bottom:18px}.appointment-day-group h3{color:var(--gold-light);font-size:15px}
+.appointment-empty{padding:18px;border:1px dashed rgba(214,175,69,.25);border-radius:10px;color:#999;text-align:center}
+.calendar-filter-panel{margin-top:20px}.calendar-filter-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.filter-count{display:block;margin-top:8px;color:#888}.calendar-month-head{margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08)}
+.calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
+.calendar-weekday{font-size:11px;text-align:center;font-weight:750;padding:7px 4px;color:var(--gold-light);letter-spacing:.05em}
+.calendar-day{min-height:68px;padding:7px;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:#0b0b0b;color:#fff;cursor:pointer;position:relative}
+.calendar-day:hover{border-color:var(--gold)}.calendar-day.empty{visibility:hidden}.calendar-day.today{outline:2px solid rgba(214,175,69,.75)}.calendar-day.selected{box-shadow:inset 0 0 0 2px var(--gold)}
+.calendar-day-number{font-weight:750}.calendar-day-count{margin-top:6px;color:var(--gold-light);font-size:11px}.calendar-day-dots{display:flex;gap:4px;margin-top:7px;flex-wrap:wrap}.calendar-dot{width:7px;height:7px;border-radius:50%;background:#777}.calendar-dot.vehicle{background:#e58bb1}.calendar-dot.garden{background:#39a852}.calendar-dot.other{background:#999}
+.badge.status-Bestätigt{border-color:rgba(57,168,82,.65);color:#8fe0a1;background:rgba(57,168,82,.09)}
+.badge.status-Abgeschlossen{border-color:rgba(255,255,255,.2);color:#aaa;background:rgba(255,255,255,.04)}
+.badge.status-Abgelehnt{border-color:rgba(214,90,90,.6);color:#ef8d8d;background:rgba(214,90,90,.08)}
+
+@media(max-width:1050px){.financial-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.calendar-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.appointment-card{grid-template-columns:65px 1fr}}
+@media(max-width:700px){.financial-stats{grid-template-columns:1fr}.calendar-filter-grid{grid-template-columns:1fr}.appointment-card{grid-template-columns:58px 1fr}.appointment-actions{grid-column:1/-1;justify-content:flex-start}.calendar-day{min-height:56px;font-size:.9rem}.day-slot{grid-template-columns:54px 1fr}.calendar-grid{gap:3px}}
