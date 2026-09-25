@@ -4,21 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>T.S. Serviceleistungen – Admin</title>
-<link rel="stylesheet" href="admin-style.css?v=gold1">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="admin-header">
-  <div class="header-logo header-logo-left">
-    <img src="logo-fahrzeugpflege.png" alt="T.S. Fahrzeugpflege & Technik">
-  </div>
-  <a class="admin-brand" href="index.html">
-    <strong>T.S. SERVICELEISTUNGEN</strong>
-    <span>ADMIN</span>
-  </a>
-  <div class="header-logo header-logo-right">
-    <img src="logo-serviceleistungen.png" alt="T.S. Serviceleistungen">
-  </div>
-  <button id="logout" class="logout-btn">Abmelden</button>
+<header>
+  <a class="brand" href="index.html"><span>TS</span><b>T.S. SERVICELEISTUNGEN · ADMIN</b></a>
+  <button id="logout">Abmelden</button>
 </header>
 
 <main>
@@ -39,11 +30,11 @@
       <button id="refresh" class="primary">Aktualisieren</button>
     </div>
 
-    <nav id="adminNav" class="admin-nav">
-      <button type="button" class="primary" data-nav="dashboard">⌂&nbsp; Dashboard</button>
-      <button type="button" data-nav="requests">▣&nbsp; Terminanfragen</button>
-      <button type="button" data-nav="receipts">▤&nbsp; Belege</button>
-      <a class="nav-link" href="https://ts-serviceleistungen.github.io/ts-kalender/" target="_blank" rel="noopener">▦&nbsp; TS-Kalender</a>
+    <nav id="adminNav" style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px">
+      <button type="button" class="primary" data-nav="dashboard">Dashboard</button>
+      <button type="button" data-nav="requests">Terminanfragen</button>
+      <button type="button" data-nav="receipts">Belege</button>
+      <a href="https://ts-serviceleistungen.github.io/ts-kalender/" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;padding:8px 14px;border:1px solid #ccc;border-radius:8px;text-decoration:none;color:inherit;background:#fff">TS-Kalender</a>
     </nav>
 
     <section id="dashboardHome">
@@ -64,12 +55,12 @@
         <div><b id="dashProfit">—</b><small>Gewinn · Einnahmen minus Ausgaben</small></div>
       </div>
 
-      <section class="panel quick-panel" style="margin-top:20px">
+      <section class="panel" style="margin-top:20px">
         <div class="head"><b>Schnellzugriff</b><span id="user"></span></div>
         <div style="display:flex;flex-wrap:wrap;gap:10px">
-          <button type="button" class="primary" data-nav="requests">Terminanfragen öffnen&nbsp; →</button>
-          <button type="button" data-nav="receipts">Belege öffnen&nbsp; →</button>
-          <a class="nav-link" href="https://ts-serviceleistungen.github.io/ts-kalender/" target="_blank" rel="noopener">TS-Kalender öffnen&nbsp; →</a>
+          <button type="button" class="primary" data-nav="requests">Terminanfragen öffnen</button>
+          <button type="button" data-nav="receipts">Belege öffnen</button>
+          <a href="https://ts-serviceleistungen.github.io/ts-kalender/" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;padding:8px 14px;border:1px solid #ccc;border-radius:8px;text-decoration:none;color:inherit;background:#fff">TS-Kalender öffnen</a>
         </div>
       </section>
     </section>
@@ -90,14 +81,12 @@
 
     <section id="receiptsView" class="hidden">
       <section class="panel">
-        <div class="head"><b>Beleg erfassen</b></div>
+        <div class="head"><b>Beleg / Rechnung hochladen</b></div>
         <form id="receiptForm" style="display:grid;gap:12px">
-          <label>Belegfoto
-            <input id="receiptImage" type="file" accept="image/*" capture="environment" required>
+          <label>Dokument auswählen
+            <input id="receiptImage" type="file" accept="image/*,application/pdf" capture="environment" required>
           </label>
-          <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <button type="button" id="ocrReceipt" class="primary">🔎 Beleg automatisch erkennen</button>
-          </div>
+          <p class="notice" style="margin:0">📤 Ein Klick auf „Beleg / Rechnung hochladen“ öffnet auf PC und Smartphone die Dateiauswahl. Bilder werden automatisch per OCR ausgewertet; PDFs werden archiviert.</p>
           <p id="ocrMsg" class="notice hidden"></p>
           <label>Datum
             <input id="receiptDate" type="date" required>
@@ -133,11 +122,11 @@
             </select>
           </label>
           <p id="receiptMsg" class="notice hidden"></p>
-          <button class="primary" type="submit">Beleg speichern</button>
+          <button class="primary" type="submit" id="saveReceiptBtn">📤 Beleg / Rechnung hochladen</button>
         </form>
       </section>
 
-      <section class="panel quick-panel" style="margin-top:20px">
+      <section class="panel" style="margin-top:20px">
         <div class="head"><b>Alle Belege</b></div>
         <div id="receiptList"><p>Belege werden geladen...</p></div>
       </section>
@@ -158,6 +147,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
-<script src="admin.js?v=gewinn3"></script>
+<script src="admin.js?v=belegupload1"></script>
 </body>
 </html>

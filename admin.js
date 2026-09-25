@@ -30,6 +30,7 @@ const dashInvoiceGross = document.getElementById('dashInvoiceGross');
 const dashProfit = document.getElementById('dashProfit');
 
 const INVOICE_TOTAL_URL = 'https://script.google.com/macros/s/AKfycbwgt0D4wTsK55OhiTS3OGAEN-XzGMDhNXrC7_gbr1MWm4UFzl9fEqKqLZzO2GrGlsw1/exec';
+const BELEG_UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbwgt0D4wTsK55OhiTS3OGAEN-XzGMDhNXrC7_gbr1MWm4UFzl9fEqKqLZzO2GrGlsw1/exec';
 const receiptForm = document.getElementById('receiptForm');
 const receiptImage = document.getElementById('receiptImage');
 const receiptDate = document.getElementById('receiptDate');
@@ -40,7 +41,7 @@ const receiptCategory = document.getElementById('receiptCategory');
 const receiptDescription = document.getElementById('receiptDescription');
 const receiptPayment = document.getElementById('receiptPayment');
 const receiptMsg = document.getElementById('receiptMsg');
-const ocrReceiptBtn = document.getElementById('ocrReceipt');
+const saveReceiptBtn = document.getElementById('saveReceiptBtn');
 const ocrMsg = document.getElementById('ocrMsg');
 const receiptList = document.getElementById('receiptList');
 
@@ -259,20 +260,14 @@ function fileToDataUrl(file){
 
 async function recognizeReceipt(){
   const file=receiptImage.files?.[0];
-  if(!file){
-    showOcrMsg('Bitte zuerst ein Belegfoto auswählen.',true);
-    return;
-  }
+  if(!file)return;
 
   if(!file.type.startsWith('image/')){
-    showOcrMsg('Bitte ein Bild als Beleg auswählen.',true);
+    showOcrMsg('PDF erkannt. Die Datei wird archiviert; automatische OCR ist für PDF in dieser Version nicht aktiviert. Bitte Datum und Bruttobetrag kontrollieren/eintragen.');
     return;
   }
 
-  ocrReceiptBtn.disabled=true;
-  ocrReceiptBtn.textContent='🔎 Beleg wird erkannt…';
-  showOcrMsg('Beleg wird analysiert. Bitte einen Moment warten…');
-
+  showOcrMsg('Beleg wird automatisch erkannt…');
   try{
     const dataUrl=await fileToDataUrl(file);
     const {data:{session}}=await db.auth.getSession();
@@ -298,19 +293,65 @@ async function recognizeReceipt(){
     if(result.description)receiptDescription.value=result.description;
     if(result.payment_method)receiptPayment.value=result.payment_method;
 
-    showOcrMsg('Erkennung abgeschlossen. Bitte die Daten kontrollieren – besonders den Bruttobetrag – und anschließend speichern.');
+    showOcrMsg('Erkennung abgeschlossen. Bitte die Daten kontrollieren – besonders den Bruttobetrag – und anschließend hochladen.');
   }catch(err){
     showOcrMsg(err.message,true);
-  }finally{
-    ocrReceiptBtn.disabled=false;
-    ocrReceiptBtn.textContent='🔎 Beleg automatisch erkennen';
   }
+}
+
+function dataUrlParts(dataUrl){
+  const match=String(dataUrl).match(/^data:([^;,]+)(?:;[^,]*)?,(.*)$/s);
+  if(!match)throw new Error('Datei konnte für Google Drive nicht vorbereitet werden.');
+  return {mimeType:match[1]||'application/octet-stream',base64:match[2]};
+}
+
+function safeFilePart(value){
+  return String(value||'').trim().replace(/[\\/:*?"<>|]/g,'-').replace(/\s+/g,' ').slice(0,80);
+}
+
+function driveFileName(file){
+  const date=receiptDate.value||new Date().toLocaleDateString('sv-SE');
+  const merchant=safeFilePart(receiptMerchant.value)||'Unbekannt';
+  const number=safeFilePart(receiptNumber.value)||'ohne-Nr';
+  const gross=Number(String(receiptGross.value||0).replace(',','.'));
+  const amount=Number.isFinite(gross)?gross.toFixed(2).replace('.',','):'0,00';
+  const ext=(file.name.split('.').pop()||'bin').toLowerCase().replace(/[^a-z0-9]/g,'')||'bin';
+  return `${date}_${merchant}_${number}_${amount}EUR.${ext}`.slice(0,180);
+}
+
+async function uploadReceiptToDrive(file){
+  const dataUrl=await fileToDataUrl(file);
+  const parts=dataUrlParts(dataUrl);
+  const payload={
+    action:'uploadBeleg',
+    fileName:driveFileName(file),
+    mimeType:parts.mimeType||file.type||'application/octet-stream',
+    base64:parts.base64,
+    receiptDate:receiptDate.value,
+    merchant:receiptMerchant.value.trim(),
+    receiptNumber:receiptNumber.value.trim(),
+    grossAmount:Number(String(receiptGross.value).replace(',','.')),
+    category:receiptCategory.value,
+    description:receiptDescription.value.trim(),
+    paymentMethod:receiptPayment.value
+  };
+
+  // text/plain avoids a browser CORS preflight while the Apps Script web app
+  // still receives the raw JSON in e.postData.contents.
+  const response=await fetch(BELEG_UPLOAD_URL,{
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=UTF-8'},
+    body:JSON.stringify(payload)
+  });
+  const result=await response.json().catch(()=>({}));
+  if(!response.ok || !result.ok)throw new Error(result.error||'Google Drive Upload fehlgeschlagen.');
+  return result;
 }
 
 async function saveReceipt(){
   const file=receiptImage.files?.[0];
   if(!file){
-    showReceiptMsg('Bitte ein Belegfoto auswählen.',true);
+    showReceiptMsg('Bitte zuerst einen Beleg oder eine Rechnung auswählen.',true);
     return;
   }
 
@@ -330,11 +371,15 @@ async function saveReceipt(){
   const ext=(file.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')||'jpg';
   const path=`${id}.${ext}`;
 
-  showReceiptMsg('Beleg wird gespeichert…');
+  saveReceiptBtn.disabled=true;
+  saveReceiptBtn.textContent='⏳ Wird hochgeladen…';
+  showReceiptMsg('Dokument wird dauerhaft in Supabase Storage und anschließend in Google Drive archiviert…');
 
+  let storageUploaded=false;
   try{
-    const upload=await db.storage.from('receipts').upload(path,file,{contentType:file.type||'image/jpeg',upsert:false});
+    const upload=await db.storage.from('receipts').upload(path,file,{contentType:file.type||'application/octet-stream',upsert:false});
     if(upload.error)throw upload.error;
+    storageUploaded=true;
 
     const {error}=await db.from('receipts').insert({
       id,
@@ -349,15 +394,35 @@ async function saveReceipt(){
     });
     if(error){
       await db.storage.from('receipts').remove([path]);
+      storageUploaded=false;
       throw error;
+    }
+
+    let driveResult=null;
+    try{
+      driveResult=await uploadReceiptToDrive(file);
+    }catch(driveError){
+      console.warn('Google Drive Upload fehlgeschlagen:',driveError.message);
+      showReceiptMsg(`Beleg wurde in der App gespeichert, aber Google Drive konnte nicht erreicht werden: ${driveError.message}`,true);
+      await loadReceipts();
+      return;
     }
 
     receiptForm.reset();
     receiptDate.value=new Date().toLocaleDateString('sv-SE');
-    showReceiptMsg('Beleg erfolgreich gespeichert.');
+    showOcrMsg('');
+    ocrMsg.classList.add('hidden');
+    showReceiptMsg(`Beleg erfolgreich gespeichert. Google Drive: ${driveResult.fileName||'archiviert'}`);
     await loadReceipts();
   }catch(err){
+    if(storageUploaded){
+      // The DB row normally exists only after a successful insert. Keep the
+      // document if a later step failed so no original is lost.
+    }
     showReceiptMsg('Beleg konnte nicht gespeichert werden: '+err.message,true);
+  }finally{
+    saveReceiptBtn.disabled=false;
+    saveReceiptBtn.textContent='📤 Beleg / Rechnung hochladen';
   }
 }
 
@@ -404,7 +469,13 @@ document.querySelectorAll('[data-nav]').forEach(btn=>{
 });
 
 
-ocrReceiptBtn.addEventListener('click',recognizeReceipt);
+receiptImage.addEventListener('change',()=>{
+  ocrMsg.classList.add('hidden');
+  if(receiptImage.files?.[0]){
+    if(!receiptDate.value)receiptDate.value=new Date().toLocaleDateString('sv-SE');
+    recognizeReceipt();
+  }
+});
 
 receiptForm.addEventListener('submit',async e=>{
   e.preventDefault();
