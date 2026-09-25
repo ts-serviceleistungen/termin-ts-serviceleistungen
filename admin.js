@@ -506,17 +506,33 @@ async function recognizeReceipt(){
     return;
   }
 
-  if(!file.type.startsWith('image/')){
-    showOcrMsg('Bitte ein Bild als Beleg auswählen.',true);
+  const isPdf=file.type==='application/pdf' || /\.pdf$/i.test(file.name);
+  if(!file.type.startsWith('image/') && !isPdf){
+    showOcrMsg('Bitte ein Bild oder PDF als Beleg/Rechnung auswählen.',true);
     return;
   }
 
-  ocrReceiptBtn.disabled=true;
-  ocrReceiptBtn.textContent='🔎 Beleg wird erkannt…';
-  showOcrMsg('Beleg wird analysiert. Bitte einen Moment warten…');
+  if(ocrReceiptBtn)ocrReceiptBtn.disabled=true;
+  if(ocrReceiptBtn)ocrReceiptBtn.textContent='🔎 Dokument wird erkannt…';
+  showOcrMsg('Dokument wird analysiert. Bitte einen Moment warten…');
 
   try{
-    const dataUrl=await fileToDataUrl(file);
+    let dataUrl;
+    if(isPdf){
+      if(!window.pdfjsLib)throw new Error('PDF-Erkennung ist noch nicht geladen. Bitte Seite einmal neu laden.');
+      const buffer=await file.arrayBuffer();
+      const pdf=await window.pdfjsLib.getDocument({data:buffer}).promise;
+      const page=await pdf.getPage(1);
+      const viewport=page.getViewport({scale:2});
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.ceil(viewport.width);
+      canvas.height=Math.ceil(viewport.height);
+      const ctx=canvas.getContext('2d');
+      await page.render({canvasContext:ctx,viewport}).promise;
+      dataUrl=canvas.toDataURL('image/jpeg',0.9);
+    }else{
+      dataUrl=await fileToDataUrl(file);
+    }
     const {data:{session}}=await db.auth.getSession();
     if(!session)throw new Error('Deine Anmeldung ist abgelaufen. Bitte erneut anmelden.');
 
@@ -544,8 +560,8 @@ async function recognizeReceipt(){
   }catch(err){
     showOcrMsg(err.message,true);
   }finally{
-    ocrReceiptBtn.disabled=false;
-    ocrReceiptBtn.textContent='🔎 Beleg automatisch erkennen';
+    if(ocrReceiptBtn)ocrReceiptBtn.disabled=false;
+    if(ocrReceiptBtn)ocrReceiptBtn.textContent='🔎 Beleg automatisch erkennen';
   }
 }
 
@@ -653,6 +669,11 @@ document.querySelectorAll('[data-nav]').forEach(btn=>{
 
 if(ocrReceiptBtn){
   ocrReceiptBtn.addEventListener('click',recognizeReceipt);
+}
+if(receiptImage){
+  receiptImage.addEventListener('change',()=>{
+    if(receiptImage.files?.[0]) recognizeReceipt();
+  });
 }
 
 if(receiptForm){

@@ -148,7 +148,8 @@
           <label>Dokument auswählen
             <input id="receiptImage" type="file" accept="image/*,application/pdf" capture="environment" required>
           </label>
-          <p class="notice" style="margin:0">📤 Ein Klick auf „Beleg / Rechnung hochladen“ öffnet auf PC und Smartphone die Dateiauswahl. Bilder und PDFs werden automatisch per KI ausgewertet; bei PDFs wird die erste Seite analysiert.</p>
+          <p class="notice" style="margin:0">📤 Bild oder PDF auswählen. Die KI-Auslesung startet automatisch; bei PDFs wird die erste Seite analysiert.</p>
+          <button type="button" id="ocrReceipt" class="primary">🔎 Beleg / Rechnung jetzt auslesen</button>
           <p id="ocrMsg" class="notice hidden"></p>
           <label>Datum
             <input id="receiptDate" type="date" required>
@@ -217,6 +218,8 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>window.pdfjsLib && (window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js");</script>
 <script src="config.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="admin.js?v=finanz-final-20260925-2215"></script>
