@@ -326,6 +326,7 @@ function euro(value){
 }
 
 function showReceiptMsg(message, error=false){
+  if(!receiptMsg)return;
   receiptMsg.textContent=message;
   receiptMsg.classList.remove('hidden');
   receiptMsg.style.color=error?'#b00020':'';
@@ -403,6 +404,7 @@ async function loadReceipts(){
 
 
 function showOcrMsg(message,error=false){
+  if(!ocrMsg)return;
   ocrMsg.textContent=message;
   ocrMsg.classList.remove('hidden');
   ocrMsg.style.color=error?'#b00020':'';
@@ -418,6 +420,9 @@ function fileToDataUrl(file){
 }
 
 async function recognizeReceipt(){
+  if(!receiptImage){
+    return;
+  }
   const file=receiptImage.files?.[0];
   if(!file){
     showOcrMsg('Bitte zuerst ein Belegfoto auswählen.',true);
@@ -468,6 +473,9 @@ async function recognizeReceipt(){
 }
 
 async function saveReceipt(){
+  if(!receiptImage){
+    return;
+  }
   const file=receiptImage.files?.[0];
   if(!file){
     showReceiptMsg('Bitte ein Belegfoto auswählen.',true);
@@ -564,18 +572,25 @@ document.querySelectorAll('[data-nav]').forEach(btn=>{
 });
 
 
-ocrReceiptBtn.addEventListener('click',recognizeReceipt);
+if(ocrReceiptBtn){
+  ocrReceiptBtn.addEventListener('click',recognizeReceipt);
+}
 
-receiptForm.addEventListener('submit',async e=>{
-  e.preventDefault();
-  await saveReceipt();
-});
-receiptList.addEventListener('click',async e=>{
-  const open=e.target.closest('[data-receipt-open]');
-  if(open)return openReceipt(open.dataset.receiptOpen);
-  const del=e.target.closest('[data-receipt-delete]');
-  if(del)return deleteReceipt(del.dataset.receiptDelete);
-});
+if(receiptForm){
+  receiptForm.addEventListener('submit',async e=>{
+    e.preventDefault();
+    await saveReceipt();
+  });
+}
+
+if(receiptList){
+  receiptList.addEventListener('click',async e=>{
+    const open=e.target.closest('[data-receipt-open]');
+    if(open)return openReceipt(open.dataset.receiptOpen);
+    const del=e.target.closest('[data-receipt-delete]');
+    if(del)return deleteReceipt(del.dataset.receiptDelete);
+  });
+}
 
 loginForm.addEventListener('submit',async e=>{e.preventDefault();loginMsg.classList.add('hidden');const {error}=await db.auth.signInWithPassword({email:emailEl.value.trim(),password:passwordEl.value});if(error){showLoginMessage(error.message);return}await init()});
 listEl.addEventListener('click',async e=>{const button=e.target.closest('button[data-action]');if(!button)return;const id=button.dataset.id;const action=button.dataset.action;if(action==='details')return openDetails(id);if(action==='confirm')return confirmRequest(id);if(action==='reject')return rejectRequest(id);if(action==='alternative')return alternativeRequest(id);if(action==='delete')return deleteRequest(id)});
