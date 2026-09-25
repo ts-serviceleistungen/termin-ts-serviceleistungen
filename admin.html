@@ -4,36 +4,26 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>T.S. Serviceleistungen – Admin</title>
-<link rel="stylesheet" href="style.css">
-
-<style>
-  .calendar-weekday{font-size:.78rem;text-align:center;font-weight:700;padding:5px}
-  .calendar-day{min-height:48px;padding:5px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer}
-  .calendar-day.empty{visibility:hidden}
-  .calendar-day.today{outline:2px solid #b89b5e}
-  .calendar-day.selected{box-shadow:inset 0 0 0 2px #111}
-  .appointment-card{display:grid;grid-template-columns:70px 1fr auto;gap:12px;align-items:center;padding:10px;border:1px solid #ddd;border-radius:10px;margin-bottom:8px;background:#fff}
-  .appointment-time{display:flex;flex-direction:column}
-  .appointment-main{display:flex;flex-direction:column;gap:2px}
-  .appointment-main small{opacity:.75}
-  .appointment-actions{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
-  .day-slot{display:grid;grid-template-columns:70px 1fr;gap:10px;padding:6px 0;border-bottom:1px solid #eee}
-  .day-slot-time{font-weight:700}
-  .day-slot-content{min-width:0}
-  .day-slot-empty{opacity:.45}
-  .appointment-day-group{margin-bottom:16px}
-  @media(max-width:700px){
-    .appointment-card{grid-template-columns:58px 1fr}
-    .appointment-actions{grid-column:1/-1;justify-content:flex-start}
-    .calendar-day{min-height:42px;font-size:.9rem}
-  }
-</style>
-
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="admin-style.css?v=gold2">
+<meta name="theme-color" content="#090909">
 </head>
 <body>
-<header>
-  <a class="brand" href="index.html"><span>TS</span><b>T.S. SERVICELEISTUNGEN · ADMIN</b></a>
-  <button id="logout">Abmelden</button>
+<header class="admin-header">
+  <div class="header-logo header-logo-left">
+    <img src="logo-fahrzeugpflege.png" alt="T.S. Fahrzeugpflege &amp; Technik">
+  </div>
+  <a class="admin-brand" href="index.html">
+    <strong>T.S. SERVICELEISTUNGEN</strong>
+    <span>ADMIN</span>
+  </a>
+  <div class="header-logo header-logo-right">
+    <img src="logo-serviceleistungen.png" alt="T.S. Serviceleistungen">
+  </div>
+  <div class="header-actions">
+    <button id="installApp" class="install-btn" type="button">＋ App installieren</button>
+    <button id="logout" class="logout-btn">Abmelden</button>
+  </div>
 </header>
 
 <main>
@@ -54,11 +44,11 @@
       <button id="refresh" class="primary">Aktualisieren</button>
     </div>
 
-    <nav id="adminNav" style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px">
-      <button type="button" class="primary" data-nav="dashboard">Dashboard</button>
-      <button type="button" data-nav="requests">Terminanfragen</button>
-      <button type="button" data-nav="receipts">Belege</button>
-      <a href="https://ts-serviceleistungen.github.io/ts-kalender/" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;padding:8px 14px;border:1px solid #ccc;border-radius:8px;text-decoration:none;color:inherit;background:#fff">TS-Kalender</a>
+    <nav id="adminNav" class="admin-nav">
+      <button type="button" class="primary" data-nav="dashboard">⌂&nbsp; Dashboard</button>
+      <button type="button" data-nav="requests">▣&nbsp; Terminanfragen</button>
+      <button type="button" data-nav="receipts">▤&nbsp; Belege</button>
+      <a class="nav-link" href="https://ts-serviceleistungen.github.io/ts-kalender/" target="_blank" rel="noopener">▦&nbsp; TS-Kalender</a>
     </nav>
 
     <section id="dashboardHome">
@@ -74,37 +64,17 @@
         <div><b id="dashMonthGross">0,00 €</b><small>Ausgaben diesen Monat · brutto</small></div>
       </div>
 
-
       <div class="stats" style="margin-top:16px">
-        <div><b id="dashInvoiceGross">0,00 €</b><small>Rechnungen dieses Jahr · brutto <span id="financialYearLabel"></span></small></div>
-        <div><b id="dashProfit">0,00 €</b><small>Gewinn dieses Jahr · brutto <span id="financialYearLabel2"></span></small></div>
-        <div><b id="dashInvoiceMonth">0,00 €</b><small>Rechnungen diesen Monat · brutto</small></div>
-        <div><b id="dashProfitMonth">0,00 €</b><small>Gewinn diesen Monat · brutto</small></div>
+        <div><b id="dashInvoiceGross">—</b><small>Rechnungen · Brutto gesamt</small></div>
+        <div><b id="dashProfit">—</b><small>Gewinn · Einnahmen minus Ausgaben</small></div>
       </div>
 
-      <section class="panel" style="margin-top:20px">
-        <div class="head"><b>Finanzübersicht <span id="financialMonthLabel"></span></b></div>
-        <div style="overflow:auto">
-          <table style="width:100%;border-collapse:collapse">
-            <thead>
-              <tr>
-                <th style="text-align:left;padding:8px">Monat</th>
-                <th style="text-align:right;padding:8px">Einnahmen</th>
-                <th style="text-align:right;padding:8px">Ausgaben</th>
-                <th style="text-align:right;padding:8px">Gewinn</th>
-              </tr>
-            </thead>
-            <tbody id="financialMonthlyTable"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="panel" style="margin-top:20px">
+      <section class="panel quick-panel" style="margin-top:20px">
         <div class="head"><b>Schnellzugriff</b><span id="user"></span></div>
         <div style="display:flex;flex-wrap:wrap;gap:10px">
           <button type="button" class="primary" data-nav="requests">Terminanfragen öffnen</button>
           <button type="button" data-nav="receipts">Belege öffnen</button>
-          <a href="https://ts-serviceleistungen.github.io/ts-kalender/" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;padding:8px 14px;border:1px solid #ccc;border-radius:8px;text-decoration:none;color:inherit;background:#fff">TS-Kalender öffnen</a>
+          <a class="nav-link" href="https://ts-serviceleistungen.github.io/ts-kalender/" target="_blank" rel="noopener">TS-Kalender öffnen&nbsp; →</a>
         </div>
       </section>
     </section>
@@ -116,57 +86,6 @@
         <div><b id="today">0</b><small>Heute</small></div>
       </div>
 
-
-      <section class="panel" style="margin-top:20px">
-        <div class="head">
-          <div>
-            <b>Admin-Kalender</b>
-            <small id="appointmentSummary" style="display:block">Termine</small>
-          </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <button type="button" id="appointmentToday">Heute</button>
-            <button type="button" id="appointmentPrev">‹</button>
-            <button type="button" id="appointmentNext">›</button>
-          </div>
-        </div>
-
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-          <button type="button" class="appt-view active" data-view="day">Tag</button>
-          <button type="button" class="appt-view" data-view="week">Woche</button>
-          <button type="button" class="appt-view" data-view="month">Monat</button>
-        </div>
-
-        <h3 id="appointmentTitle" style="margin:8px 0 12px"></h3>
-        <div id="appointmentOverview"></div>
-      </section>
-
-
-      
-      <section class="panel" style="margin-bottom:20px">
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">
-          <input id="searchFilter" type="search" placeholder="Kunde, Fahrzeug, Leistung …">
-          <select id="statusFilter">
-            <option value="">Alle Status</option>
-            <option>Neue Anfrage</option>
-            <option>Bestätigt</option>
-            <option>Alternativtermin</option>
-            <option>Abgelehnt</option>
-            <option>Abgeschlossen</option>
-          </select>
-          <input id="dateFilter" type="date">
-          <button type="button" id="clearFilters">Filter zurücksetzen</button>
-        </div>
-        <small id="filterCount" style="display:block;margin-top:8px">0 von 0</small>
-        <div class="head" style="margin-top:14px">
-          <b id="calendarTitle">Kalender</b>
-          <div style="display:flex;gap:6px">
-            <button type="button" id="prevMonth">‹</button>
-            <button type="button" id="nextMonth">›</button>
-          </div>
-        </div>
-        <div id="calendar" style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px"></div>
-      </section>
-
       <section class="panel">
         <div class="head"><b>Anfragen</b><span></span></div>
         <div id="list"></div>
@@ -176,14 +95,12 @@
 
     <section id="receiptsView" class="hidden">
       <section class="panel">
-        <div class="head"><b>Beleg erfassen</b></div>
+        <div class="head"><b>Beleg / Rechnung hochladen</b></div>
         <form id="receiptForm" style="display:grid;gap:12px">
-          <label>Belegfoto
-            <input id="receiptImage" type="file" accept="image/*" capture="environment" required>
+          <label>Dokument auswählen
+            <input id="receiptImage" type="file" accept="image/*,application/pdf" capture="environment" required>
           </label>
-          <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <button type="button" id="ocrReceipt" class="primary">🔎 Beleg automatisch erkennen</button>
-          </div>
+          <p class="notice" style="margin:0">📤 Ein Klick auf „Beleg / Rechnung hochladen“ öffnet auf PC und Smartphone die Dateiauswahl. Bilder und PDFs werden automatisch per KI ausgewertet; bei PDFs wird die erste Seite analysiert.</p>
           <p id="ocrMsg" class="notice hidden"></p>
           <label>Datum
             <input id="receiptDate" type="date" required>
@@ -195,7 +112,7 @@
             <input id="receiptNumber" type="text">
           </label>
           <label>Bruttobetrag (€)
-            <input id="receiptGross" type="number" min="0" step="0.01" inputmode="decimal" required>
+            <input id="receiptGross" type="number" min="0" step="0.01" inputmode="decimal">
           </label>
           <label>Kategorie
             <select id="receiptCategory">
@@ -219,11 +136,11 @@
             </select>
           </label>
           <p id="receiptMsg" class="notice hidden"></p>
-          <button class="primary" type="submit">Beleg speichern</button>
+          <button class="primary" type="submit" id="saveReceiptBtn">📤 Beleg / Rechnung hochladen</button>
         </form>
       </section>
 
-      <section class="panel" style="margin-top:20px">
+      <section class="panel quick-panel" style="margin-top:20px">
         <div class="head"><b>Alle Belege</b></div>
         <div id="receiptList"><p>Belege werden geladen...</p></div>
       </section>
@@ -242,8 +159,19 @@
   </div>
 </div>
 
+<div id="installHelp" class="install-help hidden">
+  <div class="install-help-card">
+    <button id="closeInstallHelp" class="close" type="button">×</button>
+    <small>T.S. SERVICELEISTUNGEN</small>
+    <h2>App auf dem Handy installieren</h2>
+    <p id="installHelpText">Die Verwaltung kann als App auf dem Startbildschirm abgelegt werden.</p>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
-<script src="admin.js?v=steps45"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="admin.js?v=belegupload4"></script>
+<script src="pwa.js?v=2"></script>
 </body>
 </html>
