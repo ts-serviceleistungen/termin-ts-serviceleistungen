@@ -380,9 +380,47 @@ async function loadFinancials(){
     return;
   }
 
-  const receiptTotals=window.receiptTotals||{year:{gross:0},month:{gross:0}};
-  const expenseYear=Number(receiptTotals.year?.gross||0);
-  const expenseMonth=Number(receiptTotals.month?.gross||0);
+  // Ausgaben direkt aus Supabase lesen. Dadurch ist die Finanzübersicht
+  // unabhängig davon, ob loadReceipts() vorher bereits gelaufen ist.
+  let expenseYear=0;
+  let expenseMonth=0;
+  const monthlyExpenses=Array.from({length:12},()=>0);
+  try{
+    const {data:expenseRows,error:expenseError}=await db
+      .from('receipts')
+      .select('receipt_date,gross_amount')
+      .order('receipt_date',{ascending:true});
+    if(expenseError)throw expenseError;
+
+    const parseAmount=value=>{
+      if(typeof value==='number')return Number.isFinite(value)?value:0;
+      let text=String(value??'').trim().replace(/€|\s/g,'');
+      if(text.includes(',')&&text.includes('.')){
+        text=text.replace(/\./g,'').replace(',','.');
+      }else if(text.includes(',')){
+        text=text.replace(',','.');
+      }
+      const n=Number(text);
+      return Number.isFinite(n)?n:0;
+    };
+
+    const rows=expenseRows||[];
+    rows.forEach(row=>{
+      const raw=String(row.receipt_date??'').trim();
+      const match=raw.match(/^(\d{4})[-.](\d{1,2})/);
+      if(!match)return;
+      const rowYear=Number(match[1]);
+      const rowMonth=Number(match[2]);
+      const amount=parseAmount(row.gross_amount);
+      if(rowYear!==year || rowMonth<1 || rowMonth>12)return;
+      expenseYear+=amount;
+      monthlyExpenses[rowMonth-1]+=amount;
+      if(rowMonth===month)expenseMonth+=amount;
+    });
+  }catch(err){
+    console.warn('Ausgabendaten:',err.message);
+  }
+
   const profitYear=invoiceYear-expenseYear;
   const profitMonth=invoiceMonth-expenseMonth;
 
@@ -392,7 +430,6 @@ async function loadFinancials(){
   if(dashProfitMonth)dashProfitMonth.textContent=euro(profitMonth);
 
   if(financialMonthlyTable){
-    const monthlyExpenses=window.receiptMonthlyTotals||Array.from({length:12},()=>0);
     financialMonthlyTable.innerHTML=monthlyInvoices.map((income,i)=>{
       const expense=Number(monthlyExpenses[i]||0);
       const profit=income-expense;
