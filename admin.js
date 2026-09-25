@@ -67,7 +67,7 @@ const financialMonthlyTable=document.getElementById('financialMonthlyTable');
 function escapeHtml(value){return String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;')}
 function formatDate(value){if(!value)return '—';const d=new Date(value+'T00:00:00');return Number.isNaN(d.getTime())?value:d.toLocaleDateString('de-DE')}
 function showLoginMessage(message){loginMsg.textContent=message;loginMsg.classList.remove('hidden')}
-async function init(){const {data,error}=await db.auth.getSession();if(error){showLoginMessage(error.message);return}const session=data.session;if(!session){loginEl.classList.remove('hidden');dashEl.classList.add('hidden');return}loginEl.classList.add('hidden');dashEl.classList.remove('hidden');userEl.textContent=session.user.email||'';showView('dashboard');ensureAdminCalendarUI();await load();await loadReceipts();await loadFinancials()}
+async function init(){const {data,error}=await db.auth.getSession();if(error){showLoginMessage(error.message);return}const session=data.session;if(!session){loginEl.classList.remove('hidden');dashEl.classList.add('hidden');return}loginEl.classList.add('hidden');dashEl.classList.remove('hidden');userEl.textContent=session.user.email||'';showView('dashboard');await load();await loadReceipts();await loadFinancials()}
 async function load(){
   listEl.innerHTML='<p>Aktualisiere Anfragen...</p>';
   const {data,error}=await db.from('requests').select('*').order('created_at',{ascending:false});
