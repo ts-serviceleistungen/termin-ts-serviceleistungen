@@ -69,39 +69,58 @@ function addBusinessDays(date,count){
   return d;
 }
 
+function selectedStartHour(time){
+  const m=String(time||'08:00').match(/^(\d{2}):00/);
+  return m ? Number(m[1]) : 8;
+}
+
 function makeDesiredBlocks(date,time,duration){
   const blocks=[];
-  const base=new Date(`${date}T08:00:00`);
-  if(duration.hours>=8){
-    let remaining=duration.hours;
-    let day=new Date(base);
-    while(remaining>=8){
-      while(day.getDay()===0||day.getDay()===6) day.setDate(day.getDate()+1);
-      const start=new Date(day); start.setHours(8,0,0,0);
-      const end=new Date(day); end.setHours(16,0,0,0);
-      blocks.push([start,end]);
-      remaining-=8;
-      day=addBusinessDays(day,1);
-    }
-    if(remaining>0){
-      while(day.getDay()===0||day.getDay()===6) day.setDate(day.getDate()+1);
-      const start=new Date(day); start.setHours(8,0,0,0);
-      const end=new Date(start.getTime()+remaining*3600000);
-      blocks.push([start,end]);
-    }
-  }else if(duration.hours===4){
+  const startHour=selectedStartHour(time);
+  const base=new Date(`${date}T00:00:00`);
+
+  // Leistungen bis 4 Stunden beginnen genau zur vom Kunden gewählten Uhrzeit.
+  // Der Zeitraum 08:00–17:00 ist das Kunden-Zeitfenster.
+  if(duration.hours < 8){
     const start=new Date(base);
-    if(time==='13:00 – 15:00'||time==='15:00 – 17:00') start.setHours(13,0,0,0);
-    const end=new Date(start.getTime()+4*3600000);
-    blocks.push([start,end]);
-  }else{
-    const start=new Date(base);
-    if(time.startsWith('10:00')) start.setHours(10,0,0,0);
-    else if(time.startsWith('13:00')) start.setHours(13,0,0,0);
-    else if(time.startsWith('15:00')) start.setHours(15,0,0,0);
+    start.setHours(startHour,0,0,0);
     const end=new Date(start.getTime()+duration.hours*3600000);
     blocks.push([start,end]);
+    return blocks;
   }
+
+  // Ganztägige/längere Leistungen werden weiterhin als Arbeitstage geplant.
+  // Die gewählte Startzeit wird für den ersten Tag berücksichtigt; ab Folgetagen
+  // wird mit 08:00 Uhr weitergeplant.
+  let remaining=duration.hours;
+  let day=new Date(base);
+  let firstDay=true;
+
+  while(remaining>0){
+    while(day.getDay()===0||day.getDay()===6) day.setDate(day.getDate()+1);
+
+    const hour=firstDay ? startHour : 8;
+    const available=Math.max(0,17-hour);
+
+    if(available===0){
+      // 17:00 ist für eine mehrstündige Leistung kein gültiger Arbeitsbeginn.
+      const next=addBusinessDays(day,1);
+      day=next;
+      firstDay=false;
+      continue;
+    }
+
+    const used=Math.min(remaining,available);
+    const start=new Date(day);
+    start.setHours(hour,0,0,0);
+    const end=new Date(start.getTime()+used*3600000);
+    blocks.push([start,end]);
+
+    remaining-=used;
+    day=addBusinessDays(day,1);
+    firstDay=false;
+  }
+
   return blocks;
 }
 
@@ -116,7 +135,26 @@ function overlapsDateOrSlot(date,time,windows,duration){
 async function validateAvailability(){
   const date=$('requested_date').value;
   if(!date) return true;
+
   const duration=calculateDuration();
+  const startHour=selectedStartHour($('requested_time').value);
+
+  // Kunden können jede volle Stunde von 08:00 bis 17:00 auswählen.
+  // Eine Leistung darf jedoch nicht über die Betriebszeit 17:00 hinausgehen.
+  if(duration.hours < 8 && startHour + duration.hours > 17){
+    $('msg').textContent=`Für diese Leistung reicht die gewünschte Startzeit ${String(startHour).padStart(2,'0')}:00 über 17:00 Uhr hinaus. Bitte wählen Sie eine frühere Uhrzeit.`;
+    $('msg').classList.remove('hidden');
+    return false;
+  }
+
+  // Bei Leistungen ab 8 Stunden kann der erste Arbeitstag nur um 08:00
+  // oder 09:00 Uhr beginnen, damit der Arbeitstag innerhalb 17:00 endet.
+  if(duration.hours >= 8 && startHour > 9){
+    $('msg').textContent='Für eine Leistung ab 8 Stunden ist als Startzeit nur 08:00 oder 09:00 Uhr möglich.';
+    $('msg').classList.remove('hidden');
+    return false;
+  }
+
   const windows=await loadBookedWindows();
   if(overlapsDateOrSlot(date,$('requested_time').value,windows,duration)){
     $('msg').textContent='Der gewünschte Zeitraum ist bereits belegt. Bitte wählen Sie einen anderen Termin.';
