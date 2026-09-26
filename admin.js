@@ -28,6 +28,10 @@ const dashYearGross = document.getElementById('dashYearGross');
 const dashMonthGross = document.getElementById('dashMonthGross');
 const dashInvoiceGross = document.getElementById('dashInvoiceGross');
 const dashProfit = document.getElementById('dashProfit');
+const dashYearCash = document.getElementById('dashYearCash');
+const dashYearCard = document.getElementById('dashYearCard');
+const dashYearTotal = document.getElementById('dashYearTotal');
+const dashMonthTotal = document.getElementById('dashMonthTotal');
 
 const INVOICE_TOTAL_URL = 'https://script.google.com/macros/s/AKfycbziO0qeGhs0URutEScjmDNF3tUPGiefZW37s6JxOQSJoY1PHpt2LwxzRQCxC0AMgX0q/exec';
 const RECEIPT_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbziO0qeGhs0URutEScjmDNF3tUPGiefZW37s6JxOQSJoY1PHpt2LwxzRQCxC0AMgX0q/exec';
@@ -851,7 +855,7 @@ document.querySelectorAll('[data-nav]').forEach(btn=>{
 });
 
 
-receiptImage.addEventListener('change',()=>{
+receiptImage?.addEventListener('change',()=>{
   ocrMsg.classList.add('hidden');
   if(receiptImage.files?.[0]){
     if(!receiptDate.value)receiptDate.value=new Date().toLocaleDateString('sv-SE');
@@ -859,11 +863,11 @@ receiptImage.addEventListener('change',()=>{
   }
 });
 
-receiptForm.addEventListener('submit',async e=>{
+receiptForm?.addEventListener('submit',async e=>{
   e.preventDefault();
   await saveReceipt();
 });
-receiptList.addEventListener('click',async e=>{
+receiptList?.addEventListener('click',async e=>{
   const open=e.target.closest('[data-receipt-open]');
   if(open)return openReceipt(open.dataset.receiptOpen);
   const del=e.target.closest('[data-receipt-delete]');
@@ -871,7 +875,7 @@ receiptList.addEventListener('click',async e=>{
 });
 
 if(appointmentTodayBtn){
-  appointmentTodayBtn.addEventListener('click',()=>{appointmentDate=new Date();renderAppointments();});
+  appointmentTodayBtn?.addEventListener('click',()=>{appointmentDate=new Date();renderAppointments();});
   appointmentPrevBtn?.addEventListener('click',()=>shiftAppointmentPeriod(-1));
   appointmentNextBtn?.addEventListener('click',()=>shiftAppointmentPeriod(1));
   appointmentViewButtons.forEach(btn=>btn.addEventListener('click',()=>{
@@ -916,7 +920,7 @@ nextMonthBtn?.addEventListener('click',()=>{
   renderCalendarRequests();
 });
 
-loginForm.addEventListener('submit',async e=>{e.preventDefault();loginMsg.classList.add('hidden');const {error}=await db.auth.signInWithPassword({email:emailEl.value.trim(),password:passwordEl.value});if(error){showLoginMessage(error.message);return}await init()});
-listEl.addEventListener('click',async e=>{const button=e.target.closest('button[data-action]');if(!button)return;const id=button.dataset.id;const action=button.dataset.action;if(action==='details')return openDetails(id);if(action==='confirm')return confirmRequest(id);if(action==='reject')return rejectRequest(id);if(action==='alternative')return alternativeRequest(id);if(action==='delete')return deleteRequest(id)});
-detailActions.addEventListener('click',async e=>{const button=e.target.closest('button[data-modal-action]');if(!button||!selectedRequest)return;const action=button.dataset.modalAction;if(action==='confirm')await confirmRequest(selectedRequest.id);if(action==='reject')await rejectRequest(selectedRequest.id);if(action==='alternative')await alternativeRequest(selectedRequest.id);if(action==='delete')await deleteRequest(selectedRequest.id)});
-closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',async()=>{refreshBtn.disabled=true;try{await load();await Promise.allSettled([loadReceipts(),loadFinancials()]);}finally{refreshBtn.disabled=false;}});init();
+loginForm?.addEventListener('submit',async e=>{e.preventDefault();loginMsg.classList.add('hidden');const {error}=await db.auth.signInWithPassword({email:emailEl.value.trim(),password:passwordEl.value});if(error){showLoginMessage(error.message);return}await init()});
+listEl?.addEventListener('click',async e=>{const button=e.target.closest('button[data-action]');if(!button)return;const id=button.dataset.id;const action=button.dataset.action;if(action==='details')return openDetails(id);if(action==='confirm')return confirmRequest(id);if(action==='reject')return rejectRequest(id);if(action==='alternative')return alternativeRequest(id);if(action==='delete')return deleteRequest(id)});
+detailActions?.addEventListener('click',async e=>{const button=e.target.closest('button[data-modal-action]');if(!button||!selectedRequest)return;const action=button.dataset.modalAction;if(action==='confirm')await confirmRequest(selectedRequest.id);if(action==='reject')await rejectRequest(selectedRequest.id);if(action==='alternative')await alternativeRequest(selectedRequest.id);if(action==='delete')await deleteRequest(selectedRequest.id)});
+closeModal?.addEventListener('click',closeDetails);modal?.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn?.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn?.addEventListener('click',async()=>{refreshBtn.disabled=true;try{await load();await Promise.allSettled([loadReceipts(),loadFinancials()]);}finally{refreshBtn.disabled=false;}});init();
