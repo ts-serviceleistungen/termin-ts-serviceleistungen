@@ -26,6 +26,10 @@ const dashToday = document.getElementById('dashToday');
 const dashReceiptCount = document.getElementById('dashReceiptCount');
 const dashYearGross = document.getElementById('dashYearGross');
 const dashMonthGross = document.getElementById('dashMonthGross');
+const dashYearCash = document.getElementById('dashYearCash');
+const dashYearCard = document.getElementById('dashYearCard');
+const dashYearTotal = document.getElementById('dashYearTotal');
+const dashMonthTotal = document.getElementById('dashMonthTotal');
 const dashInvoiceGross = document.getElementById('dashInvoiceGross');
 const dashProfit = document.getElementById('dashProfit');
 
