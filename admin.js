@@ -56,6 +56,7 @@ let adminCalendarView='month';
 
 // Google-Rechnungs-/Finanzschnittstelle
 const INVOICE_TOTAL_URL='https://script.google.com/macros/s/AKfycbziO0qeGhs0URutEScjmDNF3tUPGiefZW37s6JxOQSJoY1PHpt2LwxzRQCxC0AMgX0q/exec';
+const RECEIPT_SHEETS_URL=INVOICE_TOTAL_URL;
 const dashInvoiceGross=document.getElementById('dashInvoiceGross');
 const dashInvoiceMonth=document.getElementById('dashInvoiceMonth');
 const dashProfit=document.getElementById('dashProfit');
@@ -446,6 +447,40 @@ function showReceiptMsg(message, error=false){
   receiptMsg.style.color=error?'#b00020':'';
 }
 
+
+async function syncReceiptToGoogle(row){
+  if(!row||!row.id||!RECEIPT_SHEETS_URL)return;
+  try{
+    const payload={
+      action:'syncReceipt',
+      id:row.id,
+      receipt_date:row.receipt_date||'',
+      merchant:row.merchant||'',
+      receipt_number:row.receipt_number||'',
+      gross_amount:Number(row.gross_amount||0),
+      category:row.category||'',
+      description:row.description||'',
+      payment_method:row.payment_method||'',
+      storage_path:row.storage_path||''
+    };
+    await fetch(RECEIPT_SHEETS_URL,{
+      method:'POST',
+      mode:'no-cors',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify(payload)
+    });
+  }catch(err){
+    console.warn('Beleg-Synchronisierung Google Sheets:',err);
+  }
+}
+
+async function syncAllReceiptsToGoogle(rows){
+  if(!Array.isArray(rows)||!rows.length)return;
+  // Die Apps-Script-Seite arbeitet anhand der Beleg-ID idempotent.
+  // Daher können auch bereits vorhandene Belege gefahrlos erneut synchronisiert werden.
+  for(const row of rows) await syncReceiptToGoogle(row);
+}
+
 async function loadReceipts(){
   if(!receiptList)return;
   receiptList.innerHTML='<p>Belege werden geladen...</p>';
@@ -459,6 +494,7 @@ async function loadReceipts(){
   }
 
   const rows=data||[];
+  await syncAllReceiptsToGoogle(rows);
   const now=new Date();
   const year=now.getFullYear();
   const month=now.getMonth()+1;
