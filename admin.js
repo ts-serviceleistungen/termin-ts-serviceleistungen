@@ -78,6 +78,8 @@ let appointmentDate = new Date();
 let appointmentView = 'day';
 let calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let requests=[];let selectedRequest=null;
+// Globaler Fallback für ältere Beleg-Synchronisationsaufrufe.
+var rows=[];
 let currentInvoiceTotal=null;
 let currentReceiptTotal=null;
 
