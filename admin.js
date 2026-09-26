@@ -74,10 +74,6 @@ const appointmentNextBtn = document.getElementById('appointmentNext');
 const appointmentViewButtons = document.querySelectorAll('.appt-view');
 const dashInvoiceMonth = document.getElementById('dashInvoiceMonth');
 const dashProfitMonth = document.getElementById('dashProfitMonth');
-const dashYearCash = document.getElementById('dashYearCash');
-const dashYearCard = document.getElementById('dashYearCard');
-const dashYearTotal = document.getElementById('dashYearTotal');
-const dashMonthTotal = document.getElementById('dashMonthTotal');
 const financialYearLabel = document.getElementById('financialYearLabel');
 const financialMonthLabel = document.getElementById('financialMonthLabel');
 const financialMonthlyTable = document.getElementById('financialMonthlyTable');
@@ -86,8 +82,6 @@ let appointmentDate = new Date();
 let appointmentView = 'day';
 let calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let requests=[];let selectedRequest=null;
-// Globaler Fallback für ältere Beleg-Synchronisationsaufrufe.
-var rows=[];
 let currentInvoiceTotal=null;
 let currentReceiptTotal=null;
 
@@ -591,11 +585,11 @@ async function loadReceipts(){
         <button data-receipt-delete="${r.id}">Löschen</button>
       </div>
     </div>`).join('');
-  // Bestehende Belege werden im Hintergrund nach Google Sheets synchronisiert.
+
+  // Google-Sheets-Synchronisierung läuft erst nach dem Aufbau der Belegliste.
+  // Fehler beim Sync dürfen die App niemals blockieren.
   syncAllReceiptsToGoogle(rows);
 }
-
-
 
 function showOcrMsg(message,error=false){
   ocrMsg.textContent=message;
@@ -799,12 +793,24 @@ async function saveReceipt(){
       return;
     }
 
+    const savedReceiptForGoogle={
+      id,
+      receipt_date:receiptDate.value,
+      merchant:receiptMerchant.value.trim()||null,
+      receipt_number:receiptNumber.value.trim()||null,
+      gross_amount:gross,
+      category:receiptCategory.value,
+      description:receiptDescription.value.trim()||null,
+      payment_method:receiptPayment.value,
+      storage_path:path
+    };
+
     receiptForm.reset();
     receiptDate.value=new Date().toLocaleDateString('sv-SE');
     showOcrMsg('');
     ocrMsg.classList.add('hidden');
     showReceiptMsg(`Beleg erfolgreich gespeichert. Google Drive: ${driveResult.fileName||'archiviert'}`);
-    syncReceiptToGoogle({id,receipt_date:receiptDate.value,merchant:receiptMerchant.value.trim()||null,receipt_number:receiptNumber.value.trim()||null,gross_amount:gross,category:receiptCategory.value,description:receiptDescription.value.trim()||null,payment_method:receiptPayment.value,storage_path:path});
+    syncReceiptToGoogle(savedReceiptForGoogle);
     await loadReceipts();
   }catch(err){
     if(storageUploaded){
@@ -861,7 +867,7 @@ document.querySelectorAll('[data-nav]').forEach(btn=>{
 });
 
 
-receiptImage.addEventListener('change',()=>{
+receiptImage?.addEventListener('change',()=>{
   ocrMsg.classList.add('hidden');
   if(receiptImage.files?.[0]){
     if(!receiptDate.value)receiptDate.value=new Date().toLocaleDateString('sv-SE');
@@ -869,11 +875,11 @@ receiptImage.addEventListener('change',()=>{
   }
 });
 
-receiptForm.addEventListener('submit',async e=>{
+receiptForm?.addEventListener('submit',async e=>{
   e.preventDefault();
   await saveReceipt();
 });
-receiptList.addEventListener('click',async e=>{
+receiptList?.addEventListener('click',async e=>{
   const open=e.target.closest('[data-receipt-open]');
   if(open)return openReceipt(open.dataset.receiptOpen);
   const del=e.target.closest('[data-receipt-delete]');
