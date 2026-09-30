@@ -468,10 +468,29 @@ async function loadFinancials(){
   try{
     const response = await fetch(`${RECHNUNGS_API_URL}?v=${year}`,{cache:'no-store'});
     const result = await response.json().catch(()=>({}));
-    if(!response.ok || result.ok===false) throw new Error(result.error||'Rechnungsdaten konnten nicht geladen werden.');
-    invoiceYear = Number(result.bruttoGesamtJahr||0);
-    invoiceMonth = Number(result.bruttoGesamtMonat||0);
-    if(Array.isArray(result.monatlich)) result.monatlich.forEach((v,i)=>{if(i<12)monthlyInvoices[i]=Number(v||0)});
+    if(!response.ok || result.ok===false) throw new Error(result.error||`Google-Rechnungs-API nicht erreichbar (HTTP ${response.status}).`);
+
+    // Kompatibel mit dem aktuellen T.S.-Google-Script:
+    // Die bisherige API liefert bruttoGesamt. Neuere Versionen können
+    // zusätzlich bruttoGesamtJahr, bruttoGesamtMonat und monatlich liefern.
+    invoiceYear = Number(result.bruttoGesamtJahr ?? result.bruttoGesamt ?? 0);
+
+    if(result.bruttoGesamtMonat !== undefined){
+      invoiceMonth = Number(result.bruttoGesamtMonat||0);
+    }else if(Array.isArray(result.monatlich)){
+      invoiceMonth = Number(result.monatlich[month-1]||0);
+    }else{
+      invoiceMonth = 0;
+    }
+
+    if(Array.isArray(result.monatlich)){
+      result.monatlich.forEach((v,i)=>{
+        if(i<12) monthlyInvoices[i]=Number(v||0);
+      });
+    }else{
+      monthlyInvoices[month-1]=invoiceMonth;
+    }
+
   }catch(err){
     console.warn('Rechnungsdaten:',err.message);
     if(dashInvoiceGross) dashInvoiceGross.textContent='—';
