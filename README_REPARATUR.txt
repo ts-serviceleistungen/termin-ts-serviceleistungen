@@ -45,3 +45,11 @@ EMPFOHLENE REIHENFOLGE
 3. Im Google Apps Script die doGet-Funktion durch die mitgelieferte Version ersetzen.
 4. Neue Bereitstellung/Version der Web-App veröffentlichen.
 5. Website mit Strg+F5 neu laden.
+
+
+REPARATUR 05.10.2026 – Nachbesserung:
+- Assets wieder vollständig im ZIP enthalten (Hero + Logos).
+- PWA manifest + Service Worker + Installationsbutton ergänzt.
+- Finanzübersicht liest Monatswerte robuster aus der Rechnungs-API und den zurückgegebenen Rechnungszeilen.
+- Google-doGet erkennt Rechnungs-Spalten anhand der Überschriften und unterstützt deutsche Geld-/Datumsformate.
+- Öffentliche Anfrage-Seite bleibt ohne BMW-Hero.

@@ -1,47 +1,24 @@
 let deferredInstallPrompt = null;
-const installBtn = document.getElementById('installApp');
-const installHelp = document.getElementById('installHelp');
-const closeInstallHelp = document.getElementById('closeInstallHelp');
-const installHelpText = document.getElementById('installHelpText');
-
-function isIos(){
-  return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
-}
-function isStandalone(){
-  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-}
-
-if('serviceWorker' in navigator){
-  window.addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js?v=1').catch(()=>{}));
-}
-
-window.addEventListener('beforeinstallprompt',(event)=>{
-  event.preventDefault();
-  deferredInstallPrompt=event;
-  if(installBtn) installBtn.classList.remove('hidden');
-});
-
-window.addEventListener('appinstalled',()=>{
-  deferredInstallPrompt=null;
-  if(installBtn) installBtn.classList.add('hidden');
-});
-
-if(isStandalone() && installBtn) installBtn.classList.add('hidden');
-
-installBtn?.addEventListener('click',async()=>{
-  if(deferredInstallPrompt){
+function setupPWAInstall(){
+  const buttons = [...document.querySelectorAll('#installApp, .install-app')];
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    buttons.forEach(b => b.classList.remove('hidden'));
+  });
+  buttons.forEach(button => button.addEventListener('click', async () => {
+    if (!deferredInstallPrompt) return;
     deferredInstallPrompt.prompt();
-    await deferredInstallPrompt.userChoice;
-    deferredInstallPrompt=null;
-    return;
+    try { await deferredInstallPrompt.userChoice; } catch(e) {}
+    deferredInstallPrompt = null;
+    buttons.forEach(b => b.classList.add('hidden'));
+  }));
+  window.addEventListener('appinstalled', () => {
+    buttons.forEach(b => b.classList.add('hidden'));
+    deferredInstallPrompt = null;
+  });
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(err => console.warn('PWA Service Worker:', err)));
   }
-  if(installHelp){
-    installHelpText.textContent=isIos()
-      ? 'Auf dem iPhone: unten in Safari auf „Teilen“ tippen und anschließend „Zum Home-Bildschirm“ auswählen.'
-      : 'Falls dein Browser keine automatische Installation anbietet, öffne das Browser-Menü und wähle „Zum Startbildschirm“ oder „App installieren“. Die genaue Bezeichnung kann je nach Browser variieren.';
-    installHelp.classList.remove('hidden');
-  }
-});
-
-closeInstallHelp?.addEventListener('click',()=>installHelp?.classList.add('hidden'));
-installHelp?.addEventListener('click',(e)=>{if(e.target===installHelp)installHelp.classList.add('hidden')});
+}
+setupPWAInstall();

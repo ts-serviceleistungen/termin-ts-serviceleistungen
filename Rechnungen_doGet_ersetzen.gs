@@ -1,48 +1,62 @@
-// T.S. SERVICELEISTUNGEN – ERWEITERTE RECHNUNGS-API
-// Diesen Block als doGet(e) in dein bestehendes Rechnungs-Google-Apps-Script einsetzen.
-// Die vorhandenen Import-Funktionen müssen NICHT ersetzt werden.
-
+// T.S. SERVICELEISTUNGEN – ROBUSTE RECHNUNGS-API
+// Diese doGet()-Version erkennt die Spalten über die Überschriften und fällt
+// bei unbekannten Tabellenstrukturen auf die bisherigen Spalten A:G zurück.
 function doGet(e) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName('Rechnungen');
     if (!sheet) throw new Error('Das Tabellenblatt "Rechnungen" wurde nicht gefunden.');
 
-    const last = sheet.getLastRow();
-    const rows = [];
-    const monthly = Array.from({length: 12}, () => 0);
+    const lastRow = sheet.getLastRow();
+    const lastCol = Math.max(sheet.getLastColumn(), 7);
     const year = Number((e && e.parameter && e.parameter.year) || new Date().getFullYear());
-    const month = new Date().getMonth() + 1;
+    const currentMonth = new Date().getMonth() + 1;
+    const monthly = Array.from({length: 12}, () => 0);
+    const rows = [];
 
-    if (last >= 2) {
-      const values = sheet.getRange(2, 1, last - 1, Math.max(6, sheet.getLastColumn())).getValues();
-      values.forEach(r => {
-        const dateValue = r[0];
-        const date = dateValue instanceof Date
-          ? Utilities.formatDate(dateValue, Session.getScriptTimeZone(), 'dd.MM.yyyy')
-          : String(dateValue || '');
-        const invoiceNumber = String(r[1] || '').trim();
-        const customer = String(r[2] || '').trim();
-        const description = String(r[3] || '').trim();
-        const gross = parseMoney(r[4]);
-        const source = String(r[5] || '').trim();
-        const status = String(r[6] || '').trim();
-
-        if (!invoiceNumber && !customer && !description && !gross) return;
-
-        let y = null, m = null;
-        const parsedDate = parseSheetDate(dateValue);
-        if (parsedDate) {
-          y = parsedDate.getFullYear();
-          m = parsedDate.getMonth() + 1;
+    if (lastRow >= 2) {
+      const raw = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+      const headers = raw[0].map(v => normalizeHeader(v));
+      const findCol = aliases => {
+        for (const alias of aliases) {
+          const i = headers.indexOf(normalizeHeader(alias));
+          if (i >= 0) return i;
         }
+        for (let i = 0; i < headers.length; i++) {
+          if (aliases.some(a => headers[i].includes(normalizeHeader(a)))) return i;
+        }
+        return -1;
+      };
 
-        if (y === year) {
-          monthly[m - 1] += gross;
+      const cDate = findCol(['Datum','Rechnungsdatum','Rechnung Datum','Date','Invoice Date']);
+      const cNo = findCol(['Rechnungsnummer','Rechnungnummer','Rechnung Nr','Rechnungs-Nr','Nr','Nummer']);
+      const cCustomer = findCol(['Kunde','Kundenname','Customer','Name']);
+      const cDesc = findCol(['Beschreibung','Leistung','Description','Betreff']);
+      const cGross = findCol(['Bruttobetrag','Brutto','Gesamtbetrag brutto','Gesamt brutto','Betrag','Gesamt','Summe']);
+      const cSource = findCol(['Quelldatei','PDF','Datei','Link','Quelle']);
+      const cStatus = findCol(['Status','Zahlungsstatus']);
+
+      raw.slice(1).forEach(r => {
+        const dateValue = r[cDate >= 0 ? cDate : 0];
+        const invoiceNumber = String(r[cNo >= 0 ? cNo : 1] || '').trim();
+        const customer = String(r[cCustomer >= 0 ? cCustomer : 2] || '').trim();
+        const description = String(r[cDesc >= 0 ? cDesc : 3] || '').trim();
+        const gross = parseMoney(r[cGross >= 0 ? cGross : 4]);
+        const source = String(r[cSource >= 0 ? cSource : 5] || '').trim();
+        const status = String(r[cStatus >= 0 ? cStatus : 6] || '').trim();
+        const parsedDate = parseSheetDate(dateValue);
+        if (!parsedDate && !invoiceNumber && !customer && !description && !gross) return;
+
+        const dateText = parsedDate
+          ? Utilities.formatDate(parsedDate, Session.getScriptTimeZone(), 'dd.MM.yyyy')
+          : String(dateValue || '');
+
+        if (parsedDate && parsedDate.getFullYear() === year && parsedDate.getMonth() >= 0 && parsedDate.getMonth() < 12) {
+          monthly[parsedDate.getMonth()] += gross;
         }
 
         rows.push({
-          rechnungsdatum: date,
+          rechnungsdatum: dateText,
           rechnungsnummer: invoiceNumber,
           kunde: customer,
           beschreibung: description,
@@ -53,34 +67,8 @@ function doGet(e) {
       });
     }
 
-    const yearRows = rows.filter(r => {
-      const parts = String(r.rechnungsdatum || '').split('.');
-      return parts.length === 3 && Number(parts[2]) === year;
-    });
-
-    // Wenn das Datum im Sheet als Text gespeichert wurde, bleibt die Jahres-/Monatssumme
-    // zusätzlich robust über die vorhandenen Date-Werte berechenbar.
-    let yearGross = 0;
-    let monthGross = 0;
-    if (last >= 2) {
-      const raw = sheet.getRange(2, 1, last - 1, 5).getValues();
-      raw.forEach(r => {
-        const d = r[0];
-        const gross = parseMoney(r[4]);
-        const parsedDate = parseSheetDate(d);
-        if (parsedDate && parsedDate.getFullYear() === year) {
-          yearGross += gross;
-          if (parsedDate.getMonth() + 1 === month) monthGross += gross;
-        }
-      });
-    }
-
-    // Fallback für den Fall, dass die Datumswerte als Text im Format TT.MM.JJJJ stehen.
-    if (!yearGross && yearRows.length) {
-      yearGross = yearRows.reduce((s, r) => s + Number(r.bruttobetrag || 0), 0);
-      monthGross = yearRows.filter(r => String(r.rechnungsdatum).slice(3, 5) === String(month).padStart(2, '0'))
-        .reduce((s, r) => s + Number(r.bruttobetrag || 0), 0);
-    }
+    const yearGross = monthly.reduce((sum, value) => sum + value, 0);
+    const monthGross = monthly[currentMonth - 1] || 0;
 
     return ContentService.createTextOutput(JSON.stringify({
       ok: true,
@@ -91,13 +79,15 @@ function doGet(e) {
       rechnungen: rows.reverse(),
       aktualisiert: new Date().toISOString()
     })).setMimeType(ContentService.MimeType.JSON);
-
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({
-      ok: false,
-      error: err.message
-    })).setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({ok:false,error:String(err.message || err)})).setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+function normalizeHeader(value) {
+  return String(value || '').toLowerCase().trim()
+    .replace(/[ä]/g,'a').replace(/[ö]/g,'o').replace(/[ü]/g,'u').replace(/[ß]/g,'ss')
+    .replace(/[^a-z0-9]+/g,'');
 }
 
 function parseSheetDate(value) {
@@ -115,13 +105,11 @@ function parseMoney(value) {
   if (typeof value === 'number') return isFinite(value) ? value : 0;
   let s = String(value || '').trim();
   if (!s) return 0;
-  s = s.replace(/€/g, '').replace(/\s/g, '');
-  if (s.includes(',') && s.includes('.')) s = s.replace(/\./g, '').replace(',', '.');
-  else if (s.includes(',')) s = s.replace(',', '.');
-  const n = Number(s);
+  s = s.replace(/€/g,'').replace(/\s/g,'');
+  if (s.includes(',') && s.includes('.')) s = s.replace(/\./g,'').replace(',','.');
+  else if (s.includes(',')) s = s.replace(',','.');
+  const n = Number(s.replace(/[^0-9+\-.]/g,''));
   return isFinite(n) ? n : 0;
 }
 
-function round2(n) {
-  return Math.round(Number(n || 0) * 100) / 100;
-}
+function round2(n) { return Math.round(Number(n || 0) * 100) / 100; }

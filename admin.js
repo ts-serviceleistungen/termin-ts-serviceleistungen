@@ -461,6 +461,24 @@ function syncAllReceiptsToGoogle(rows){
   rows.forEach(row=>syncReceiptToGoogle(row));
 }
 
+function parseMoneyValue(value){
+  if(typeof value==='number') return Number.isFinite(value)?value:0;
+  let s=String(value??'').trim();
+  if(!s)return 0;
+  s=s.replace(/€/g,'').replace(/\s/g,'');
+  if(s.includes(',')&&s.includes('.')) s=s.replace(/\./g,'').replace(',','.');
+  else if(s.includes(',')) s=s.replace(',','.');
+  const n=Number(s.replace(/[^0-9+\-.]/g,''));
+  return Number.isFinite(n)?n:0;
+}
+
+function invoiceRowAmount(row){
+  return parseMoneyValue(row?.bruttobetrag ?? row?.brutto ?? row?.betrag ?? row?.gesamtbetrag ?? row?.gesamt ?? row?.amount ?? 0);
+}
+function invoiceRowDate(row){
+  return row?.rechnungsdatum ?? row?.datum ?? row?.date ?? row?.invoice_date ?? row?.created_at ?? '';
+}
+
 async function loadFinancials(){
   const now=new Date();
   const year=now.getFullYear();
@@ -470,36 +488,48 @@ async function loadFinancials(){
   if(financialMonthLabel) financialMonthLabel.textContent=now.toLocaleDateString('de-DE',{month:'long',year:'numeric'});
 
   let invoiceYear=0, invoiceMonth=0;
-  let monthlyInvoices=Array.from({length:12},()=>0);
+  const monthlyInvoices=Array.from({length:12},()=>0);
+  let invoiceRows=[];
 
-  // First load the invoice API. A failure must NOT prevent the expense side
-  // of the financial overview from being rendered.
   try{
     const response=await fetch(`${RECHNUNGS_API_URL}?year=${year}&v=${Date.now()}`,{cache:'no-store'});
     const result=await response.json().catch(()=>({}));
-    if(response.ok && result.ok!==false){
-      invoiceYear=Number(result.bruttoGesamtJahr ?? result.bruttoGesamt ?? 0)||0;
-      if(Array.isArray(result.monatlich)){
-        result.monatlich.forEach((v,i)=>{if(i<12) monthlyInvoices[i]=Number(v)||0;});
-      }
-      invoiceMonth=Number(result.bruttoGesamtMonat ?? monthlyInvoices[month-1] ?? 0)||0;
+    if(!response.ok || result.ok===false) throw new Error(result.error||`Google-Rechnungs-API nicht erreichbar (HTTP ${response.status}).`);
 
-      // Fallback: calculate monthly income directly from returned invoice rows.
-      if(Array.isArray(result.rechnungen) && result.rechnungen.length){
-        const parsed= result.rechnungen.map(r=>({
-          amount:Number(String(r.bruttobetrag??0).replace(',','.'))||0,
-          date:String(r.rechnungsdatum||'')
-        }));
-        if(!invoiceYear) invoiceYear=parsed.filter(r=>dateYear(r.date)===year).reduce((s,r)=>s+r.amount,0);
-        parsed.forEach(r=>{
-          const d=parseFlexibleDate(r.date);
-          if(d && d.getFullYear()===year) monthlyInvoices[d.getMonth()]+=r.amount;
-        });
-        invoiceMonth=monthlyInvoices[month-1];
-      }
-    }else{
-      console.warn('Rechnungsdaten:',result.error||'API nicht erreichbar');
+    if(Array.isArray(result.rechnungen)) invoiceRows=result.rechnungen;
+
+    // Prefer the explicit monthly API values when present.
+    if(Array.isArray(result.monatlich)){
+      result.monatlich.slice(0,12).forEach((v,i)=>monthlyInvoices[i]=parseMoneyValue(v));
+    }else if(result.monatlich && typeof result.monatlich==='object'){
+      Object.entries(result.monatlich).forEach(([key,val])=>{
+        const i=Number(key)-1;
+        if(i>=0&&i<12) monthlyInvoices[i]=parseMoneyValue(val);
+      });
     }
+
+    // Always rebuild from invoice rows when the monthly API values are empty.
+    // This also fixes German amounts such as "1.234,56 €".
+    const rowMonthly=Array.from({length:12},()=>0);
+    let rowYear=0;
+    invoiceRows.forEach(row=>{
+      const d=parseFlexibleDate(invoiceRowDate(row));
+      const amount=invoiceRowAmount(row);
+      if(d && d.getFullYear()===year){
+        rowYear+=amount;
+        rowMonthly[d.getMonth()]+=amount;
+      }
+    });
+
+    const apiMonthlyTotal=monthlyInvoices.reduce((a,b)=>a+b,0);
+    if(apiMonthlyTotal===0 && rowYear>0) rowMonthly.forEach((v,i)=>monthlyInvoices[i]=v);
+
+    invoiceYear=parseMoneyValue(result.bruttoGesamtJahr ?? result.bruttoGesamt ?? 0);
+    if(invoiceYear===0 && rowYear>0) invoiceYear=rowYear;
+
+    invoiceMonth=parseMoneyValue(result.bruttoGesamtMonat ?? 0);
+    if(invoiceMonth===0) invoiceMonth=monthlyInvoices[month-1]||0;
+
   }catch(err){
     console.warn('Rechnungsdaten:',err.message);
   }
@@ -507,18 +537,18 @@ async function loadFinancials(){
   const receiptTotals=window.receiptTotals||{year:{gross:0},month:{gross:0}};
   const expenseYear=Number(receiptTotals.year?.gross||0);
   const expenseMonth=Number(receiptTotals.month?.gross||0);
+  const profitYear=invoiceYear-expenseYear;
+  const profitMonth=invoiceMonth-expenseMonth;
 
   if(dashInvoiceGross) dashInvoiceGross.textContent=euro(invoiceYear);
-  if(dashInvoiceMonth) dashInvoiceMonth.textContent=euro(invoiceMonth);
-  if(dashProfit) dashProfit.textContent=euro(invoiceYear-expenseYear);
-  if(dashProfitMonth) dashProfitMonth.textContent=euro(invoiceMonth-expenseMonth);
+  if(dashInvoiceMonth) dashInvoiceMonth.textContent=`Monat: ${euro(invoiceMonth)}`;
+  if(dashProfit) dashProfit.textContent=euro(profitYear);
+  if(dashProfitMonth) dashProfitMonth.textContent=`Monat: ${euro(profitMonth)}`;
 
   if(financialMonthlyTable){
     const rows=monthlyInvoices.map((income,i)=>{
       const expense=Number(window.receiptMonthlyTotals?.[i]||0);
-      const profit=income-expense;
-      const name=new Date(year,i,1).toLocaleDateString('de-DE',{month:'long'});
-      return {name,income,expense,profit};
+      return {name:new Date(year,i,1).toLocaleDateString('de-DE',{month:'long'}),income,expense,profit:income-expense};
     });
     financialMonthlyTable.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.name)}</td><td>${euro(r.income)}</td><td>${euro(r.expense)}</td><td>${euro(r.profit)}</td></tr>`).join('');
     const chart=document.getElementById('financialChart');
@@ -527,7 +557,7 @@ async function loadFinancials(){
       chart.innerHTML=rows.map(r=>{
         const ih=Math.max(2,Math.round(r.income/max*100));
         const eh=Math.max(2,Math.round(r.expense/max*100));
-        return `<div class=\"chart-month\" title=\"${escapeHtml(r.name)}: Einnahmen ${euro(r.income)}, Ausgaben ${euro(r.expense)}\"><div class=\"chart-bars\"><span class=\"bar income\" style=\"height:${ih}%\"></span><span class=\"bar expense\" style=\"height:${eh}%\"></span></div><small>${escapeHtml(r.name.slice(0,3))}</small></div>`;
+        return `<div class="chart-month" title="${escapeHtml(r.name)}: Einnahmen ${euro(r.income)}, Ausgaben ${euro(r.expense)}"><div class="chart-bars"><span class="bar income" style="height:${ih}%"></span><span class="bar expense" style="height:${eh}%"></span></div><small>${escapeHtml(r.name.slice(0,3))}</small></div>`;
       }).join('');
     }
   }
