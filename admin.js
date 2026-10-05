@@ -461,70 +461,79 @@ function syncAllReceiptsToGoogle(rows){
 }
 
 async function loadFinancials(){
-  const year = new Date().getFullYear();
-  const month = new Date().getMonth()+1;
-  if(financialYearLabel) financialYearLabel.textContent = String(year);
-  if(financialMonthLabel) financialMonthLabel.textContent = new Date().toLocaleDateString('de-DE',{month:'long',year:'numeric'});
+  const now=new Date();
+  const year=now.getFullYear();
+  const month=now.getMonth()+1;
+  if(financialYearLabel) financialYearLabel.textContent=String(year);
+  if(financialYearLabel2) financialYearLabel2.textContent=String(year);
+  if(financialMonthLabel) financialMonthLabel.textContent=now.toLocaleDateString('de-DE',{month:'long',year:'numeric'});
 
-  let invoiceYear = 0;
-  let invoiceMonth = 0;
-  let monthlyInvoices = Array.from({length:12},()=>0);
+  let invoiceYear=0, invoiceMonth=0;
+  let monthlyInvoices=Array.from({length:12},()=>0);
 
+  // First load the invoice API. A failure must NOT prevent the expense side
+  // of the financial overview from being rendered.
   try{
-    const response = await fetch(`${RECHNUNGS_API_URL}?v=${year}`,{cache:'no-store'});
-    const result = await response.json().catch(()=>({}));
-    if(!response.ok || result.ok===false) throw new Error(result.error||`Google-Rechnungs-API nicht erreichbar (HTTP ${response.status}).`);
+    const response=await fetch(`${RECHNUNGS_API_URL}?year=${year}&v=${Date.now()}`,{cache:'no-store'});
+    const result=await response.json().catch(()=>({}));
+    if(response.ok && result.ok!==false){
+      invoiceYear=Number(result.bruttoGesamtJahr ?? result.bruttoGesamt ?? 0)||0;
+      if(Array.isArray(result.monatlich)){
+        result.monatlich.forEach((v,i)=>{if(i<12) monthlyInvoices[i]=Number(v)||0;});
+      }
+      invoiceMonth=Number(result.bruttoGesamtMonat ?? monthlyInvoices[month-1] ?? 0)||0;
 
-    // Kompatibel mit dem aktuellen T.S.-Google-Script:
-    // Die bisherige API liefert bruttoGesamt. Neuere Versionen können
-    // zusätzlich bruttoGesamtJahr, bruttoGesamtMonat und monatlich liefern.
-    invoiceYear = Number(result.bruttoGesamtJahr ?? result.bruttoGesamt ?? 0);
-
-    if(result.bruttoGesamtMonat !== undefined){
-      invoiceMonth = Number(result.bruttoGesamtMonat||0);
-    }else if(Array.isArray(result.monatlich)){
-      invoiceMonth = Number(result.monatlich[month-1]||0);
+      // Fallback: calculate monthly income directly from returned invoice rows.
+      if(Array.isArray(result.rechnungen) && result.rechnungen.length){
+        const parsed= result.rechnungen.map(r=>({
+          amount:Number(String(r.bruttobetrag??0).replace(',','.'))||0,
+          date:String(r.rechnungsdatum||'')
+        }));
+        if(!invoiceYear) invoiceYear=parsed.filter(r=>dateYear(r.date)===year).reduce((s,r)=>s+r.amount,0);
+        parsed.forEach(r=>{
+          const d=parseFlexibleDate(r.date);
+          if(d && d.getFullYear()===year) monthlyInvoices[d.getMonth()]+=r.amount;
+        });
+        invoiceMonth=monthlyInvoices[month-1];
+      }
     }else{
-      invoiceMonth = 0;
+      console.warn('Rechnungsdaten:',result.error||'API nicht erreichbar');
     }
-
-    if(Array.isArray(result.monatlich)){
-      result.monatlich.forEach((v,i)=>{
-        if(i<12) monthlyInvoices[i]=Number(v||0);
-      });
-    }else{
-      monthlyInvoices[month-1]=invoiceMonth;
-    }
-
   }catch(err){
     console.warn('Rechnungsdaten:',err.message);
-    if(dashInvoiceGross) dashInvoiceGross.textContent='—';
-    if(dashInvoiceMonth) dashInvoiceMonth.textContent='—';
-    if(dashProfit) dashProfit.textContent='—';
-    if(dashProfitMonth) dashProfitMonth.textContent='—';
-    return;
   }
 
-  const receiptTotals = window.receiptTotals || {year:{gross:0},month:{gross:0}};
-  const expenseYear = Number(receiptTotals.year?.gross||0);
-  const expenseMonth = Number(receiptTotals.month?.gross||0);
-  const profitYear = invoiceYear - expenseYear;
-  const profitMonth = invoiceMonth - expenseMonth;
+  const receiptTotals=window.receiptTotals||{year:{gross:0},month:{gross:0}};
+  const expenseYear=Number(receiptTotals.year?.gross||0);
+  const expenseMonth=Number(receiptTotals.month?.gross||0);
 
   if(dashInvoiceGross) dashInvoiceGross.textContent=euro(invoiceYear);
   if(dashInvoiceMonth) dashInvoiceMonth.textContent=euro(invoiceMonth);
-  if(dashProfit) dashProfit.textContent=euro(profitYear);
-  if(dashProfitMonth) dashProfitMonth.textContent=euro(profitMonth);
+  if(dashProfit) dashProfit.textContent=euro(invoiceYear-expenseYear);
+  if(dashProfitMonth) dashProfitMonth.textContent=euro(invoiceMonth-expenseMonth);
 
   if(financialMonthlyTable){
     financialMonthlyTable.innerHTML=monthlyInvoices.map((income,i)=>{
-      const expense=window.receiptMonthlyTotals?.[i]||0;
+      const expense=Number(window.receiptMonthlyTotals?.[i]||0);
       const profit=income-expense;
       const name=new Date(year,i,1).toLocaleDateString('de-DE',{month:'long'});
       return `<tr><td>${escapeHtml(name)}</td><td>${euro(income)}</td><td>${euro(expense)}</td><td>${euro(profit)}</td></tr>`;
     }).join('');
   }
 }
+
+function parseFlexibleDate(value){
+  if(!value)return null;
+  if(value instanceof Date && !isNaN(value))return value;
+  const s=String(value).trim();
+  let m=s.match(/^(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4})$/);
+  if(m)return new Date(Number(m[3]),Number(m[2])-1,Number(m[1]));
+  m=s.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})/);
+  if(m)return new Date(Number(m[1]),Number(m[2])-1,Number(m[3]));
+  const d=new Date(s);
+  return isNaN(d)?null:d;
+}
+function dateYear(value){const d=parseFlexibleDate(value);return d?d.getFullYear():null;}
 
 function showReceiptMsg(message, error=false){
   receiptMsg.textContent=message;
