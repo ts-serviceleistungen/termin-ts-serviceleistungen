@@ -20,6 +20,15 @@ const dashboardHome = document.getElementById('dashboardHome');
 const requestsView = document.getElementById('requestsView');
 const receiptsView = document.getElementById('receiptsView');
 const invoicesView = document.getElementById('invoicesView');
+const offersView = document.getElementById('offersView');
+const offerList = document.getElementById('offerList');
+const offerSearch = document.getElementById('offerSearch');
+const offerStatusFilter = document.getElementById('offerStatusFilter');
+const offerTotal = document.getElementById('offerTotal');
+const offerOpenTotal = document.getElementById('offerOpenTotal');
+const offerAcceptedTotal = document.getElementById('offerAcceptedTotal');
+const offerRejectedTotal = document.getElementById('offerRejectedTotal');
+const offerCount = document.getElementById('offerCount');
 const invoiceList = document.getElementById('invoiceList');
 const invoiceTotal = document.getElementById('invoiceTotal');
 const invoiceMonthTotal = document.getElementById('invoiceMonthTotal');
@@ -84,6 +93,8 @@ const financialYearLabel2 = document.getElementById('financialYearLabel2');
 const financialMonthLabel = document.getElementById('financialMonthLabel');
 const financialMonthlyTable = document.getElementById('financialMonthlyTable');
 const RECHNUNGS_API_URL = 'https://script.google.com/macros/s/AKfycbxJDx4fWqtWjWj056-ZsFJyVPBgB-6uarBsIH0Fmbf30F025o9CmlfhfKXvLU-KLh3Y/exec';
+const ANGEBOTE_API_URL = RECHNUNGS_API_URL;
+let currentOffers=[];
 let appointmentDate = new Date();
 let appointmentView = 'day';
 let calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -94,7 +105,7 @@ let currentReceiptTotal=null;
 function escapeHtml(value){return String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;')}
 function formatDate(value){if(!value)return '—';const d=new Date(value+'T00:00:00');return Number.isNaN(d.getTime())?value:d.toLocaleDateString('de-DE')}
 function showLoginMessage(message){loginMsg.textContent=message;loginMsg.classList.remove('hidden')}
-async function init(){const {data,error}=await db.auth.getSession();if(error){showLoginMessage(error.message);return}const session=data.session;if(!session){loginEl.classList.remove('hidden');dashEl.classList.add('hidden');return}loginEl.classList.add('hidden');dashEl.classList.remove('hidden');if(userEl) userEl.textContent=session.user.email||'';showView('dashboard');await load();await loadReceipts();await loadFinancials();await loadInvoices()}
+async function init(){const {data,error}=await db.auth.getSession();if(error){showLoginMessage(error.message);return}const session=data.session;if(!session){loginEl.classList.remove('hidden');dashEl.classList.add('hidden');return}loginEl.classList.add('hidden');dashEl.classList.remove('hidden');if(userEl) userEl.textContent=session.user.email||'';showView('dashboard');await load();await loadReceipts();await loadFinancials();await loadInvoices();await loadOffers()}
 async function load(){
   listEl.innerHTML='<p>Aktualisiere Anfragen...</p>';
   const {data,error}=await db.from('requests').select('*').order('created_at',{ascending:false});
@@ -940,17 +951,135 @@ async function loadInvoices(){
   }catch(err){invoiceList.innerHTML=`<p class="notice">Rechnungsdaten konnten nicht geladen werden: ${escapeHtml(err.message)}</p>`}
 }
 
+
+async function loadOffers(){
+  if(!offerList)return;
+  offerList.innerHTML='<p>Angebote werden geladen...</p>';
+  try{
+    const response=await fetch(`${ANGEBOTE_API_URL}?action=angebote&v=${Date.now()}`,{cache:'no-store'});
+    const result=await response.json().catch(()=>({}));
+    if(!response.ok||result.ok===false)throw new Error(result.error||'Angebotsdaten konnten nicht geladen werden.');
+    let rows=Array.isArray(result.angebote)?result.angebote:[];
+
+    // Persistierte Statuswerte aus der Supabase-Tabelle übernehmen.
+    // Die PDF-Auslesung bleibt dabei unverändert die Quelle für Angebotsdaten.
+    try{
+      const numbers=rows.map(r=>String(r.angebotsnummer||r.angebotsnr||'').trim()).filter(Boolean);
+      if(numbers.length){
+        const {data,error}=await db.from('offers').select('*').in('angebotsnummer',numbers);
+        if(!error && Array.isArray(data)){
+          const byNumber=new Map(data.map(x=>[String(x.angebotsnummer||'').trim(),x]));
+          rows=rows.map(r=>{
+            const saved=byNumber.get(String(r.angebotsnummer||'').trim());
+            return saved?{...r,status:saved.status||r.status}:r;
+          });
+        }
+      }
+    }catch(statusErr){
+      console.warn('Angebotsstatus aus Supabase konnte nicht geladen werden:',statusErr.message);
+    }
+
+    currentOffers=rows;
+    renderOffers();
+  }catch(err){
+    currentOffers=[];
+    offerList.innerHTML=`<p class="notice">Angebotsdaten konnten nicht geladen werden: ${escapeHtml(err.message)}</p>`;
+    updateOfferTotals([]);
+  }
+}
+
+function offerStatusClass(status){
+  if(status==='Angenommen')return 'offer-status accepted';
+  if(status==='Abgelehnt')return 'offer-status rejected';
+  return 'offer-status open';
+}
+
+function updateOfferTotals(rows){
+  const all=rows.reduce((s,r)=>s+Number(r.betrag||0),0);
+  const open=rows.filter(r=>r.status==='Offen / In Bearbeitung').reduce((s,r)=>s+Number(r.betrag||0),0);
+  const accepted=rows.filter(r=>r.status==='Angenommen').reduce((s,r)=>s+Number(r.betrag||0),0);
+  const rejected=rows.filter(r=>r.status==='Abgelehnt').reduce((s,r)=>s+Number(r.betrag||0),0);
+  if(offerTotal)offerTotal.textContent=euro(all);
+  if(offerOpenTotal)offerOpenTotal.textContent=euro(open);
+  if(offerAcceptedTotal)offerAcceptedTotal.textContent=euro(accepted);
+  if(offerRejectedTotal)offerRejectedTotal.textContent=euro(rejected);
+  if(offerCount)offerCount.textContent=String(rows.length);
+}
+
+function renderOffers(){
+  if(!offerList)return;
+  const q=(offerSearch?.value||'').trim().toLowerCase();
+  const status=offerStatusFilter?.value||'';
+  const filtered=currentOffers.filter(r=>{
+    const hay=[r.angebotsnummer,r.kunde,r.kundenname,r.firma,r.beschreibung,r.dateiname].join(' ').toLowerCase();
+    return (!q||hay.includes(q))&&(!status||r.status===status);
+  });
+  updateOfferTotals(currentOffers);
+  if(!filtered.length){
+    offerList.innerHTML='<div class="empty-box">Keine passenden Angebote gefunden.</div>';
+    return;
+  }
+  offerList.innerHTML=`<div class="invoice-table offer-table"><div class="invoice-row invoice-head"><span>Datum</span><span>Angebotsnr.</span><span>Kunde</span><span>Beschreibung</span><span>Betrag</span><span>Status</span><span>PDF</span></div>${filtered.map(r=>{
+    const number=String(r.angebotsnummer||r.angebotsnr||'—');
+    const customer=String(r.kunde||r.kundenname||r.firma||'—');
+    const status=r.status||'Offen / In Bearbeitung';
+    const pdf=r.dateiUrl||r.drive_url||r.driveUrl||'';
+    return `<div class="invoice-row offer-row"><span>${escapeHtml(r.datum||r.angebotsdatum||'—')}</span><span><b>${escapeHtml(number)}</b></span><span>${escapeHtml(customer)}</span><span>${escapeHtml(r.beschreibung||'—')}</span><span><b>${euro(r.betrag||0)}</b></span><span><select class="offer-status-select ${offerStatusClass(status)}" data-offer-number="${escapeHtml(number)}"><option value="Offen / In Bearbeitung" ${status==='Offen / In Bearbeitung'?'selected':''}>Offen / In Bearbeitung</option><option value="Angenommen" ${status==='Angenommen'?'selected':''}>Angenommen</option><option value="Abgelehnt" ${status==='Abgelehnt'?'selected':''}>Abgelehnt</option></select></span><span>${pdf?`<a href="${escapeHtml(pdf)}" target="_blank" rel="noopener">PDF</a>`:'—'}</span></div>`;
+  }).join('')}</div>`;
+}
+
+async function saveOfferStatus(offer, status){
+  const number=String(offer.angebotsnummer||offer.angebotsnr||'').trim();
+  if(!number)return;
+  const payload={
+    angebotsnummer:number,
+    angebotsdatum:offer.angebotsdatum||offer.datum||null,
+    firma:offer.firma||'',
+    kundenname:offer.kunde||offer.kundenname||'',
+    beschreibung:offer.beschreibung||'',
+    betrag:Number(offer.betrag||0),
+    status,
+    dateiname:offer.dateiname||'',
+    drive_file_id:offer.dateiId||offer.drive_file_id||'',
+    drive_url:offer.dateiUrl||offer.drive_url||''
+  };
+  const {error}=await db.from('offers').upsert(payload,{onConflict:'angebotsnummer'});
+  if(error)throw error;
+}
+
+async function handleOfferStatusChange(select){
+  const number=select.dataset.offerNumber;
+  const offer=currentOffers.find(r=>String(r.angebotsnummer||r.angebotsnr||'').trim()===number);
+  if(!offer)return;
+  const oldStatus=offer.status||'Offen / In Bearbeitung';
+  const newStatus=select.value;
+  if(oldStatus===newStatus)return;
+  select.disabled=true;
+  try{
+    await saveOfferStatus(offer,newStatus);
+    offer.status=newStatus;
+    renderOffers();
+  }catch(err){
+    select.value=oldStatus;
+    alert('Angebotsstatus konnte nicht gespeichert werden: '+err.message);
+  }finally{
+    select.disabled=false;
+  }
+}
+
 function showView(view){
   dashboardHome.classList.toggle('hidden',view!=='dashboard');
   requestsView.classList.toggle('hidden',view!=='requests');
   receiptsView.classList.toggle('hidden',view!=='receipts');
   if(invoicesView)invoicesView.classList.toggle('hidden',view!=='invoices');
+  if(offersView)offersView.classList.toggle('hidden',view!=='offers');
   document.querySelectorAll('[data-back-dashboard]').forEach(btn=>btn.classList.toggle('hidden',view==='dashboard'));
 
   if(pageTitle && view==='dashboard')pageTitle.textContent='Dashboard';
   if(pageTitle && view==='requests')pageTitle.textContent='Terminanfragen';
   if(pageTitle && view==='receipts')pageTitle.textContent='Belege';
   if(pageTitle && view==='invoices')pageTitle.textContent='Rechnungen';
+  if(pageTitle && view==='offers')pageTitle.textContent='Angebote';
 
   if(view==='requests')load();
   if(view==='receipts'){
@@ -958,6 +1087,7 @@ function showView(view){
     loadReceipts();
   }
   if(view==='invoices')loadInvoices();
+  if(view==='offers')loadOffers();
 }
 
 document.querySelectorAll('[data-nav]').forEach(btn=>{
@@ -969,6 +1099,13 @@ document.querySelectorAll('[data-nav]').forEach(btn=>{
 
 document.querySelectorAll('[data-back-dashboard]').forEach(btn=>btn.addEventListener('click',()=>{showView('dashboard');window.scrollTo({top:0,behavior:'smooth'});}));
 
+
+offerSearch?.addEventListener('input',renderOffers);
+offerStatusFilter?.addEventListener('change',renderOffers);
+offerList?.addEventListener('change',e=>{
+  const select=e.target.closest('[data-offer-number]');
+  if(select)handleOfferStatusChange(select);
+});
 
 receiptImage?.addEventListener('change',()=>{
   ocrMsg.classList.add('hidden');
@@ -1038,4 +1175,4 @@ nextMonthBtn?.addEventListener('click',()=>{
 loginForm.addEventListener('submit',async e=>{e.preventDefault();loginMsg.classList.add('hidden');const {error}=await db.auth.signInWithPassword({email:emailEl.value.trim(),password:passwordEl.value});if(error){showLoginMessage(error.message);return}await init()});
 listEl.addEventListener('click',async e=>{const button=e.target.closest('button[data-action]');if(!button)return;const id=button.dataset.id;const action=button.dataset.action;if(action==='details')return openDetails(id);if(action==='confirm')return confirmRequest(id);if(action==='reject')return rejectRequest(id);if(action==='alternative')return alternativeRequest(id);if(action==='delete')return deleteRequest(id)});
 detailActions.addEventListener('click',async e=>{const button=e.target.closest('button[data-modal-action]');if(!button||!selectedRequest)return;const action=button.dataset.modalAction;if(action==='confirm')await confirmRequest(selectedRequest.id);if(action==='reject')await rejectRequest(selectedRequest.id);if(action==='alternative')await alternativeRequest(selectedRequest.id);if(action==='delete')await deleteRequest(selectedRequest.id)});
-closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',async()=>{refreshBtn.disabled=true;try{await load();await loadReceipts();await loadFinancials();await loadInvoices();}finally{refreshBtn.disabled=false;}});init();
+closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',async()=>{refreshBtn.disabled=true;try{await load();await loadReceipts();await loadFinancials();await loadInvoices();await loadOffers();}finally{refreshBtn.disabled=false;}});init();
