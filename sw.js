@@ -1,4 +1,4 @@
-const CACHE = 'ts-serviceleistungen-v20261005-2';
+const CACHE = 'ts-serviceleistungen-v20261005-3';
 const SHELL = [
   './', './index.html', './admin.html', './request.css', './admin.css',
   './app.js', './admin.js', './config.js', './pwa.js', './datenschutz.html',
