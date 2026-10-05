@@ -31,9 +31,10 @@ function doGet(e) {
         if (!invoiceNumber && !customer && !description && !gross) return;
 
         let y = null, m = null;
-        if (dateValue instanceof Date) {
-          y = dateValue.getFullYear();
-          m = dateValue.getMonth() + 1;
+        const parsedDate = parseSheetDate(dateValue);
+        if (parsedDate) {
+          y = parsedDate.getFullYear();
+          m = parsedDate.getMonth() + 1;
         }
 
         if (y === year) {
@@ -66,9 +67,10 @@ function doGet(e) {
       raw.forEach(r => {
         const d = r[0];
         const gross = parseMoney(r[4]);
-        if (d instanceof Date && d.getFullYear() === year) {
+        const parsedDate = parseSheetDate(d);
+        if (parsedDate && parsedDate.getFullYear() === year) {
           yearGross += gross;
-          if (d.getMonth() + 1 === month) monthGross += gross;
+          if (parsedDate.getMonth() + 1 === month) monthGross += gross;
         }
       });
     }
@@ -96,6 +98,17 @@ function doGet(e) {
       error: err.message
     })).setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+function parseSheetDate(value) {
+  if (value instanceof Date && !isNaN(value)) return value;
+  const s = String(value || '').trim();
+  let m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
 }
 
 function parseMoney(value) {

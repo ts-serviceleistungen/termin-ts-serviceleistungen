@@ -1,26 +1,47 @@
-T.S. SERVICELEISTUNGEN – REPARATURSTAND 05.10.2026
+T.S. SERVICELEISTUNGEN – REPARATUR 05.10.2026
 
-1. Anfrage-App
-- Neues responsives Design.
-- BMW-M3-Hero aus dem vorhandenen T.S.-Design als Bildreferenz.
-- Serviceauswahl jetzt 6 Bereiche: Fahrzeugpflege, Gartenarbeiten, Foto & Drohnenfotografie, Ersatzteilanfrage, Reifenanfrage, Zubehörmontage.
-- Formularfelder sauber responsive.
-- Datenschutz-Link funktioniert über datenschutz.html.
-- Privacy-Consent und Fahrzeugfotos bleiben erhalten.
-- Termin-/Dauerlogik aus dem zuletzt gespeicherten app.js wurde übernommen.
+Diese Version behebt die aktuellen Probleme im ADMIN-Bereich:
 
-2. Admin
-- Neues Admin-Layout im zuletzt gewünschten Gold/Weiß/Schwarz-Stil.
-- BMW-M3-Hero wieder integriert.
-- Belege werden nicht mehr im Dashboard auf 0 zurückgesetzt.
-- Belege werden weiterhin aus Supabase `receipts` geladen.
-- Rechnungen werden über die vorhandene Google-Rechnungs-API geladen.
-- Zusätzliche Rechnungsansicht vorbereitet.
+1. BMW-/Hero-Bild
+   - Das Admin-Hero-Bild ist jetzt direkt in admin.html eingebettet.
+   - Dadurch kann es auf GitHub Pages nicht mehr wegen eines fehlenden assets-Pfades als kaputtes Bild erscheinen.
+   - Das BMW-/Drone-/T.S.-Design bleibt ausschließlich im ADMIN.
+   - Die öffentliche Anfrage-Seite bleibt ohne BMW-Hero.
 
-3. WICHTIG – Rechnungen
-Die bisherige Google-API lieferte zuletzt nur `bruttoGesamt`. Deshalb konnte die App keine einzelnen Rechnungszeilen anzeigen.
-Die Datei `Rechnungen_doGet_ersetzen.gs` enthält eine erweiterte `doGet(e)`-Version. Nur diese Funktion im bestehenden Google-Apps-Script ersetzen und danach die Web-App-Bereitstellung aktualisieren.
-Die bestehende Rechnungsimport-Logik bleibt erhalten.
+2. Logos
+   - Die vorhandenen Logo-Assets bleiben im Ordner assets erhalten.
+   - Das sichtbare Hero-Design ist zusätzlich direkt eingebettet, damit Logo und Hero zuverlässig erscheinen.
 
-4. Daten
-Es werden keine Belege oder Rechnungen gelöscht. Die Reparatur ändert die Oberfläche und das Auslesen.
+3. Monatliche Einnahmen
+   - In admin.js wurde ein Fehler mit dem Element financialYearLabel2 behoben.
+   - Die Datumsparser waren doppelt escaped und konnten TT.MM.JJJJ nicht korrekt erkennen. Das wurde behoben.
+   - Die Rechnungs-API wird ausdrücklich mit ?year=2026 abgefragt.
+   - Das Dashboard zeigt jetzt 12 Monatszeilen sowie eine monatliche Balkenauswertung Einnahmen/Ausgaben.
+   - Gewinn = Einnahmen aus Rechnungen – Brutto-Ausgaben aus Belegen.
+
+4. Dashboard-Zurück-Button
+   - Auf Terminanfragen, Rechnungen und Belege gibt es jetzt einen sichtbaren „← Dashboard“-Button.
+
+5. Google Apps Script
+   - Rechnungen_doGet_ersetzen.gs enthält die korrigierte doGet-Version.
+   - WICHTIG: Diese doGet-Version muss in das bestehende Rechnungs-Google-Apps-Script übernommen und als neue Web-App-Version bereitgestellt werden.
+   - Die bisherige URL bleibt gleich, sofern das bestehende Script weiterverwendet wird.
+
+DATEIEN
+- admin.html
+- admin.css
+- admin.js
+- index.html
+- request.css
+- app.js
+- config.js
+- datenschutz.html
+- assets/*
+- Rechnungen_doGet_ersetzen.gs
+
+EMPFOHLENE REIHENFOLGE
+1. ZIP entpacken.
+2. Die Dateien in dein bestehendes GitHub-Pages-Projekt übernehmen.
+3. Im Google Apps Script die doGet-Funktion durch die mitgelieferte Version ersetzen.
+4. Neue Bereitstellung/Version der Web-App veröffentlichen.
+5. Website mit Strg+F5 neu laden.

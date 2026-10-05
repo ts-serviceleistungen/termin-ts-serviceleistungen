@@ -80,6 +80,7 @@ const appointmentViewButtons = document.querySelectorAll('.appt-view');
 const dashInvoiceMonth = document.getElementById('dashInvoiceMonth');
 const dashProfitMonth = document.getElementById('dashProfitMonth');
 const financialYearLabel = document.getElementById('financialYearLabel');
+const financialYearLabel2 = document.getElementById('financialYearLabel2');
 const financialMonthLabel = document.getElementById('financialMonthLabel');
 const financialMonthlyTable = document.getElementById('financialMonthlyTable');
 const RECHNUNGS_API_URL = 'https://script.google.com/macros/s/AKfycbziO0qeGhs0URutEScjmDNF3tUPGiefZW37s6JxOQSJoY1PHpt2LwxzRQCxC0AMgX0q/exec';
@@ -93,7 +94,7 @@ let currentReceiptTotal=null;
 function escapeHtml(value){return String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;')}
 function formatDate(value){if(!value)return '—';const d=new Date(value+'T00:00:00');return Number.isNaN(d.getTime())?value:d.toLocaleDateString('de-DE')}
 function showLoginMessage(message){loginMsg.textContent=message;loginMsg.classList.remove('hidden')}
-async function init(){const {data,error}=await db.auth.getSession();if(error){showLoginMessage(error.message);return}const session=data.session;if(!session){loginEl.classList.remove('hidden');dashEl.classList.add('hidden');return}loginEl.classList.add('hidden');dashEl.classList.remove('hidden');userEl.textContent=session.user.email||'';showView('dashboard');await load();await loadReceipts();await loadFinancials();await loadInvoices()}
+async function init(){const {data,error}=await db.auth.getSession();if(error){showLoginMessage(error.message);return}const session=data.session;if(!session){loginEl.classList.remove('hidden');dashEl.classList.add('hidden');return}loginEl.classList.add('hidden');dashEl.classList.remove('hidden');if(userEl) userEl.textContent=session.user.email||'';showView('dashboard');await load();await loadReceipts();await loadFinancials();await loadInvoices()}
 async function load(){
   listEl.innerHTML='<p>Aktualisiere Anfragen...</p>';
   const {data,error}=await db.from('requests').select('*').order('created_at',{ascending:false});
@@ -461,70 +462,89 @@ function syncAllReceiptsToGoogle(rows){
 }
 
 async function loadFinancials(){
-  const year = new Date().getFullYear();
-  const month = new Date().getMonth()+1;
-  if(financialYearLabel) financialYearLabel.textContent = String(year);
-  if(financialMonthLabel) financialMonthLabel.textContent = new Date().toLocaleDateString('de-DE',{month:'long',year:'numeric'});
+  const now=new Date();
+  const year=now.getFullYear();
+  const month=now.getMonth()+1;
+  if(financialYearLabel) financialYearLabel.textContent=String(year);
+  if(financialYearLabel2) financialYearLabel2.textContent=String(year);
+  if(financialMonthLabel) financialMonthLabel.textContent=now.toLocaleDateString('de-DE',{month:'long',year:'numeric'});
 
-  let invoiceYear = 0;
-  let invoiceMonth = 0;
-  let monthlyInvoices = Array.from({length:12},()=>0);
+  let invoiceYear=0, invoiceMonth=0;
+  let monthlyInvoices=Array.from({length:12},()=>0);
 
+  // First load the invoice API. A failure must NOT prevent the expense side
+  // of the financial overview from being rendered.
   try{
-    const response = await fetch(`${RECHNUNGS_API_URL}?v=${year}`,{cache:'no-store'});
-    const result = await response.json().catch(()=>({}));
-    if(!response.ok || result.ok===false) throw new Error(result.error||`Google-Rechnungs-API nicht erreichbar (HTTP ${response.status}).`);
+    const response=await fetch(`${RECHNUNGS_API_URL}?year=${year}&v=${Date.now()}`,{cache:'no-store'});
+    const result=await response.json().catch(()=>({}));
+    if(response.ok && result.ok!==false){
+      invoiceYear=Number(result.bruttoGesamtJahr ?? result.bruttoGesamt ?? 0)||0;
+      if(Array.isArray(result.monatlich)){
+        result.monatlich.forEach((v,i)=>{if(i<12) monthlyInvoices[i]=Number(v)||0;});
+      }
+      invoiceMonth=Number(result.bruttoGesamtMonat ?? monthlyInvoices[month-1] ?? 0)||0;
 
-    // Kompatibel mit dem aktuellen T.S.-Google-Script:
-    // Die bisherige API liefert bruttoGesamt. Neuere Versionen können
-    // zusätzlich bruttoGesamtJahr, bruttoGesamtMonat und monatlich liefern.
-    invoiceYear = Number(result.bruttoGesamtJahr ?? result.bruttoGesamt ?? 0);
-
-    if(result.bruttoGesamtMonat !== undefined){
-      invoiceMonth = Number(result.bruttoGesamtMonat||0);
-    }else if(Array.isArray(result.monatlich)){
-      invoiceMonth = Number(result.monatlich[month-1]||0);
+      // Fallback: calculate monthly income directly from returned invoice rows.
+      if(Array.isArray(result.rechnungen) && result.rechnungen.length){
+        const parsed= result.rechnungen.map(r=>({
+          amount:Number(String(r.bruttobetrag??0).replace(',','.'))||0,
+          date:String(r.rechnungsdatum||'')
+        }));
+        if(!invoiceYear) invoiceYear=parsed.filter(r=>dateYear(r.date)===year).reduce((s,r)=>s+r.amount,0);
+        parsed.forEach(r=>{
+          const d=parseFlexibleDate(r.date);
+          if(d && d.getFullYear()===year) monthlyInvoices[d.getMonth()]+=r.amount;
+        });
+        invoiceMonth=monthlyInvoices[month-1];
+      }
     }else{
-      invoiceMonth = 0;
+      console.warn('Rechnungsdaten:',result.error||'API nicht erreichbar');
     }
-
-    if(Array.isArray(result.monatlich)){
-      result.monatlich.forEach((v,i)=>{
-        if(i<12) monthlyInvoices[i]=Number(v||0);
-      });
-    }else{
-      monthlyInvoices[month-1]=invoiceMonth;
-    }
-
   }catch(err){
     console.warn('Rechnungsdaten:',err.message);
-    if(dashInvoiceGross) dashInvoiceGross.textContent='—';
-    if(dashInvoiceMonth) dashInvoiceMonth.textContent='—';
-    if(dashProfit) dashProfit.textContent='—';
-    if(dashProfitMonth) dashProfitMonth.textContent='—';
-    return;
   }
 
-  const receiptTotals = window.receiptTotals || {year:{gross:0},month:{gross:0}};
-  const expenseYear = Number(receiptTotals.year?.gross||0);
-  const expenseMonth = Number(receiptTotals.month?.gross||0);
-  const profitYear = invoiceYear - expenseYear;
-  const profitMonth = invoiceMonth - expenseMonth;
+  const receiptTotals=window.receiptTotals||{year:{gross:0},month:{gross:0}};
+  const expenseYear=Number(receiptTotals.year?.gross||0);
+  const expenseMonth=Number(receiptTotals.month?.gross||0);
 
   if(dashInvoiceGross) dashInvoiceGross.textContent=euro(invoiceYear);
   if(dashInvoiceMonth) dashInvoiceMonth.textContent=euro(invoiceMonth);
-  if(dashProfit) dashProfit.textContent=euro(profitYear);
-  if(dashProfitMonth) dashProfitMonth.textContent=euro(profitMonth);
+  if(dashProfit) dashProfit.textContent=euro(invoiceYear-expenseYear);
+  if(dashProfitMonth) dashProfitMonth.textContent=euro(invoiceMonth-expenseMonth);
 
   if(financialMonthlyTable){
-    financialMonthlyTable.innerHTML=monthlyInvoices.map((income,i)=>{
-      const expense=window.receiptMonthlyTotals?.[i]||0;
+    const rows=monthlyInvoices.map((income,i)=>{
+      const expense=Number(window.receiptMonthlyTotals?.[i]||0);
       const profit=income-expense;
       const name=new Date(year,i,1).toLocaleDateString('de-DE',{month:'long'});
-      return `<tr><td>${escapeHtml(name)}</td><td>${euro(income)}</td><td>${euro(expense)}</td><td>${euro(profit)}</td></tr>`;
-    }).join('');
+      return {name,income,expense,profit};
+    });
+    financialMonthlyTable.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.name)}</td><td>${euro(r.income)}</td><td>${euro(r.expense)}</td><td>${euro(r.profit)}</td></tr>`).join('');
+    const chart=document.getElementById('financialChart');
+    if(chart){
+      const max=Math.max(1,...rows.map(r=>Math.max(r.income,r.expense)));
+      chart.innerHTML=rows.map(r=>{
+        const ih=Math.max(2,Math.round(r.income/max*100));
+        const eh=Math.max(2,Math.round(r.expense/max*100));
+        return `<div class=\"chart-month\" title=\"${escapeHtml(r.name)}: Einnahmen ${euro(r.income)}, Ausgaben ${euro(r.expense)}\"><div class=\"chart-bars\"><span class=\"bar income\" style=\"height:${ih}%\"></span><span class=\"bar expense\" style=\"height:${eh}%\"></span></div><small>${escapeHtml(r.name.slice(0,3))}</small></div>`;
+      }).join('');
+    }
   }
 }
+
+function parseFlexibleDate(value){
+  if(!value)return null;
+  if(value instanceof Date && !isNaN(value))return value;
+  const s=String(value).trim();
+  let m=s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if(m)return new Date(Number(m[3]),Number(m[2])-1,Number(m[1]));
+  m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m)return new Date(Number(m[1]),Number(m[2])-1,Number(m[3]));
+  const d=new Date(s);
+  return isNaN(d)?null:d;
+}
+function dateYear(value){const d=parseFlexibleDate(value);return d?d.getFullYear():null;}
 
 function showReceiptMsg(message, error=false){
   receiptMsg.textContent=message;
@@ -872,7 +892,7 @@ async function loadInvoices(){
   if(!invoiceList)return;
   invoiceList.innerHTML='<p>Rechnungen werden geladen...</p>';
   try{
-    const response=await fetch(`${RECHNUNGS_API_URL}?v=${new Date().getFullYear()}`,{cache:'no-store'});
+    const response=await fetch(`${RECHNUNGS_API_URL}?year=${new Date().getFullYear()}&v=${Date.now()}`,{cache:'no-store'});
     const result=await response.json().catch(()=>({}));
     if(!response.ok||result.ok===false)throw new Error(result.error||'Rechnungsdaten konnten nicht geladen werden.');
     const rows=Array.isArray(result.rechnungen)?result.rechnungen:[];
@@ -892,11 +912,12 @@ function showView(view){
   requestsView.classList.toggle('hidden',view!=='requests');
   receiptsView.classList.toggle('hidden',view!=='receipts');
   if(invoicesView)invoicesView.classList.toggle('hidden',view!=='invoices');
+  document.querySelectorAll('[data-back-dashboard]').forEach(btn=>btn.classList.toggle('hidden',view==='dashboard'));
 
-  if(view==='dashboard')pageTitle.textContent='Dashboard';
-  if(view==='requests')pageTitle.textContent='Terminanfragen';
-  if(view==='receipts')pageTitle.textContent='Belege';
-  if(view==='invoices')pageTitle.textContent='Rechnungen';
+  if(pageTitle && view==='dashboard')pageTitle.textContent='Dashboard';
+  if(pageTitle && view==='requests')pageTitle.textContent='Terminanfragen';
+  if(pageTitle && view==='receipts')pageTitle.textContent='Belege';
+  if(pageTitle && view==='invoices')pageTitle.textContent='Rechnungen';
 
   if(view==='requests')load();
   if(view==='receipts'){
@@ -912,6 +933,8 @@ document.querySelectorAll('[data-nav]').forEach(btn=>{
     window.scrollTo({top:0,behavior:'smooth'});
   });
 });
+
+document.querySelectorAll('[data-back-dashboard]').forEach(btn=>btn.addEventListener('click',()=>{showView('dashboard');window.scrollTo({top:0,behavior:'smooth'});}));
 
 
 receiptImage?.addEventListener('change',()=>{
