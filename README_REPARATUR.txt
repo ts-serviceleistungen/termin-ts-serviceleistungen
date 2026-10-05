@@ -1,30 +1,47 @@
-T.S. SERVICELEISTUNGEN – FINALER REPARATURSTAND 05.10.2026
+T.S. SERVICELEISTUNGEN – REPARATUR 05.10.2026
 
-WICHTIG
-=======
-1. Alle Dateien aus diesem Paket ins GitHub-Projekt übernehmen.
-2. Den Ordner "assets" komplett mit hochladen.
-3. Die neue "admin.html", "admin.css" und "admin.js" ersetzen.
-4. "index.html", request.css, app.js und datenschutz.html aus dem Paket übernehmen.
-5. Die Supabase-Datenbank NICHT löschen oder neu anlegen.
-6. Rechnungen_doGet_ersetzen.gs gehört in das bestehende Google-Apps-Script für die Rechnungen.
-   Nur die doGet-/Hilfsfunktionen aktualisieren; Import-/Upload-Funktionen des bestehenden Scripts bleiben bestehen.
+Diese Version behebt die aktuellen Probleme im ADMIN-Bereich:
 
-ADMIN-DESIGN
-============
-Der Admin-Bereich verwendet jetzt den hochgeladenen Original-Entwurf als Hero:
-- BMW M3
-- T.S. Serviceleistungen Logo
-- Drohne
-- Thomas / Administrator
-- gold/weißes Karten-Design
+1. BMW-/Hero-Bild
+   - Das Admin-Hero-Bild ist jetzt direkt in admin.html eingebettet.
+   - Dadurch kann es auf GitHub Pages nicht mehr wegen eines fehlenden assets-Pfades als kaputtes Bild erscheinen.
+   - Das BMW-/Drone-/T.S.-Design bleibt ausschließlich im ADMIN.
+   - Die öffentliche Anfrage-Seite bleibt ohne BMW-Hero.
 
-Der BMW/Design-Hero ist ausschließlich im Admin-Bereich.
-Die öffentliche Anfrage-Seite bekommt KEINEN BMW-Hero.
+2. Logos
+   - Die vorhandenen Logo-Assets bleiben im Ordner assets erhalten.
+   - Das sichtbare Hero-Design ist zusätzlich direkt eingebettet, damit Logo und Hero zuverlässig erscheinen.
 
-FINANZEN
-========
-Die Monatsübersicht wird unabhängig von der Rechnungs-API aufgebaut.
-Belege werden direkt aus Supabase nach Jahr/Monat summiert.
-Die Rechnungs-API unterstützt jetzt deutsche Datumsformate (TT.MM.JJJJ) und ISO-Daten
-und liefert monatliche Einnahmen.
+3. Monatliche Einnahmen
+   - In admin.js wurde ein Fehler mit dem Element financialYearLabel2 behoben.
+   - Die Datumsparser waren doppelt escaped und konnten TT.MM.JJJJ nicht korrekt erkennen. Das wurde behoben.
+   - Die Rechnungs-API wird ausdrücklich mit ?year=2026 abgefragt.
+   - Das Dashboard zeigt jetzt 12 Monatszeilen sowie eine monatliche Balkenauswertung Einnahmen/Ausgaben.
+   - Gewinn = Einnahmen aus Rechnungen – Brutto-Ausgaben aus Belegen.
+
+4. Dashboard-Zurück-Button
+   - Auf Terminanfragen, Rechnungen und Belege gibt es jetzt einen sichtbaren „← Dashboard“-Button.
+
+5. Google Apps Script
+   - Rechnungen_doGet_ersetzen.gs enthält die korrigierte doGet-Version.
+   - WICHTIG: Diese doGet-Version muss in das bestehende Rechnungs-Google-Apps-Script übernommen und als neue Web-App-Version bereitgestellt werden.
+   - Die bisherige URL bleibt gleich, sofern das bestehende Script weiterverwendet wird.
+
+DATEIEN
+- admin.html
+- admin.css
+- admin.js
+- index.html
+- request.css
+- app.js
+- config.js
+- datenschutz.html
+- assets/*
+- Rechnungen_doGet_ersetzen.gs
+
+EMPFOHLENE REIHENFOLGE
+1. ZIP entpacken.
+2. Die Dateien in dein bestehendes GitHub-Pages-Projekt übernehmen.
+3. Im Google Apps Script die doGet-Funktion durch die mitgelieferte Version ersetzen.
+4. Neue Bereitstellung/Version der Web-App veröffentlichen.
+5. Website mit Strg+F5 neu laden.

@@ -103,9 +103,9 @@ function doGet(e) {
 function parseSheetDate(value) {
   if (value instanceof Date && !isNaN(value)) return value;
   const s = String(value || '').trim();
-  let m = s.match(/^(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4})$/);
+  let m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
   if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
-  m = s.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})/);
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   const d = new Date(s);
   return isNaN(d) ? null : d;
