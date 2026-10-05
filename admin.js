@@ -19,6 +19,11 @@ const todayEl = document.getElementById('today');
 const dashboardHome = document.getElementById('dashboardHome');
 const requestsView = document.getElementById('requestsView');
 const receiptsView = document.getElementById('receiptsView');
+const invoicesView = document.getElementById('invoicesView');
+const invoiceList = document.getElementById('invoiceList');
+const invoiceTotal = document.getElementById('invoiceTotal');
+const invoiceMonthTotal = document.getElementById('invoiceMonthTotal');
+const invoiceSearch = document.getElementById('invoiceSearch');
 const pageTitle = document.getElementById('pageTitle');
 const dashNew = document.getElementById('dashNew');
 const dashOpen = document.getElementById('dashOpen');
@@ -88,7 +93,7 @@ let currentReceiptTotal=null;
 function escapeHtml(value){return String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;')}
 function formatDate(value){if(!value)return '—';const d=new Date(value+'T00:00:00');return Number.isNaN(d.getTime())?value:d.toLocaleDateString('de-DE')}
 function showLoginMessage(message){loginMsg.textContent=message;loginMsg.classList.remove('hidden')}
-async function init(){const {data,error}=await db.auth.getSession();if(error){showLoginMessage(error.message);return}const session=data.session;if(!session){loginEl.classList.remove('hidden');dashEl.classList.add('hidden');return}loginEl.classList.add('hidden');dashEl.classList.remove('hidden');userEl.textContent=session.user.email||'';showView('dashboard');await load();await loadReceipts();await loadFinancials()}
+async function init(){const {data,error}=await db.auth.getSession();if(error){showLoginMessage(error.message);return}const session=data.session;if(!session){loginEl.classList.remove('hidden');dashEl.classList.add('hidden');return}loginEl.classList.add('hidden');dashEl.classList.remove('hidden');userEl.textContent=session.user.email||'';showView('dashboard');await load();await loadReceipts();await loadFinancials();await loadInvoices()}
 async function load(){
   listEl.innerHTML='<p>Aktualisiere Anfragen...</p>';
   const {data,error}=await db.from('requests').select('*').order('created_at',{ascending:false});
@@ -862,20 +867,43 @@ async function deleteReceipt(id){
   await loadReceipts();
 }
 
+
+async function loadInvoices(){
+  if(!invoiceList)return;
+  invoiceList.innerHTML='<p>Rechnungen werden geladen...</p>';
+  try{
+    const response=await fetch(`${RECHNUNGS_API_URL}?v=${new Date().getFullYear()}`,{cache:'no-store'});
+    const result=await response.json().catch(()=>({}));
+    if(!response.ok||result.ok===false)throw new Error(result.error||'Rechnungsdaten konnten nicht geladen werden.');
+    const rows=Array.isArray(result.rechnungen)?result.rechnungen:[];
+    const year=Number(result.bruttoGesamtJahr??result.bruttoGesamt??0);
+    const month=Number(result.bruttoGesamtMonat??0);
+    if(invoiceTotal)invoiceTotal.textContent=euro(year);
+    if(invoiceMonthTotal)invoiceMonthTotal.textContent=euro(month);
+    if(!rows.length){invoiceList.innerHTML='<div class="empty-box">Die Rechnungs-API liefert aktuell nur Summen. Sobald die erweiterte <b>doGet()</b>-Version eingespielt ist, erscheinen hier wieder alle Rechnungen.</div>';return;}
+    const q=(invoiceSearch?.value||'').trim().toLowerCase();
+    const filtered=rows.filter(r=>[r.rechnungsnummer,r.kunde,r.beschreibung,r.rechnungsdatum].join(' ').toLowerCase().includes(q));
+    invoiceList.innerHTML=filtered.length?`<div class="invoice-table"><div class="invoice-row invoice-head"><span>Datum</span><span>Rechnungsnr.</span><span>Kunde</span><span>Beschreibung</span><span>Brutto</span><span>Quelle</span></div>${filtered.map(r=>`<div class="invoice-row"><span>${escapeHtml(r.rechnungsdatum||'—')}</span><span><b>${escapeHtml(r.rechnungsnummer||'—')}</b></span><span>${escapeHtml(r.kunde||'—')}</span><span>${escapeHtml(r.beschreibung||'—')}</span><span><b>${euro(r.bruttobetrag||0)}</b></span><span>${r.quelldatei?`<a href="${escapeHtml(r.quelldatei)}" target="_blank" rel="noopener">PDF</a>`:'—'}</span></div>`).join('')}</div>`:'<div class="empty-box">Keine passende Rechnung gefunden.</div>';
+  }catch(err){invoiceList.innerHTML=`<p class="notice">Rechnungsdaten konnten nicht geladen werden: ${escapeHtml(err.message)}</p>`}
+}
+
 function showView(view){
   dashboardHome.classList.toggle('hidden',view!=='dashboard');
   requestsView.classList.toggle('hidden',view!=='requests');
   receiptsView.classList.toggle('hidden',view!=='receipts');
+  if(invoicesView)invoicesView.classList.toggle('hidden',view!=='invoices');
 
   if(view==='dashboard')pageTitle.textContent='Dashboard';
   if(view==='requests')pageTitle.textContent='Terminanfragen';
   if(view==='receipts')pageTitle.textContent='Belege';
+  if(view==='invoices')pageTitle.textContent='Rechnungen';
 
   if(view==='requests')load();
   if(view==='receipts'){
     receiptDate.value=receiptDate.value||new Date().toLocaleDateString('sv-SE');
     loadReceipts();
   }
+  if(view==='invoices')loadInvoices();
 }
 
 document.querySelectorAll('[data-nav]').forEach(btn=>{
@@ -954,4 +982,4 @@ nextMonthBtn?.addEventListener('click',()=>{
 loginForm.addEventListener('submit',async e=>{e.preventDefault();loginMsg.classList.add('hidden');const {error}=await db.auth.signInWithPassword({email:emailEl.value.trim(),password:passwordEl.value});if(error){showLoginMessage(error.message);return}await init()});
 listEl.addEventListener('click',async e=>{const button=e.target.closest('button[data-action]');if(!button)return;const id=button.dataset.id;const action=button.dataset.action;if(action==='details')return openDetails(id);if(action==='confirm')return confirmRequest(id);if(action==='reject')return rejectRequest(id);if(action==='alternative')return alternativeRequest(id);if(action==='delete')return deleteRequest(id)});
 detailActions.addEventListener('click',async e=>{const button=e.target.closest('button[data-modal-action]');if(!button||!selectedRequest)return;const action=button.dataset.modalAction;if(action==='confirm')await confirmRequest(selectedRequest.id);if(action==='reject')await rejectRequest(selectedRequest.id);if(action==='alternative')await alternativeRequest(selectedRequest.id);if(action==='delete')await deleteRequest(selectedRequest.id)});
-closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',async()=>{refreshBtn.disabled=true;try{await load();await loadReceipts();await loadFinancials();}finally{refreshBtn.disabled=false;}});init();
+closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',async()=>{refreshBtn.disabled=true;try{await load();await loadReceipts();await loadFinancials();await loadInvoices();}finally{refreshBtn.disabled=false;}});init();

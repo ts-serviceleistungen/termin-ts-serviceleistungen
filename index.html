@@ -2,99 +2,64 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="description" content="T.S. Serviceleistungen – Online-Anfrage">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#b88918">
+<meta name="description" content="T.S. Serviceleistungen – Anfrage">
 <title>T.S. Serviceleistungen – Anfrage</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="request.css?v=20261005">
 </head>
 <body>
-<header class="site-header">
-  <a class="brand" href="index.html">
-    <span class="brand-mark">TS</span>
-    <span><b>T.S. SERVICELEISTUNGEN</b><small>REGIONAL · ZUVERLÄSSIG · PERSÖNLICH</small></span>
-  </a>
-  <nav>
-    <a href="datenschutz">Datenschutz</a>
-    <a class="admin-link" href="admin.html">🔐 Admin-Login</a>
-  </nav>
+<header class="topbar">
+  <a class="brand" href="index.html"><span class="brand-mark">T.S.</span><span><b>T.S. SERVICELEISTUNGEN</b><small>ONLINE-ANFRAGE</small></span></a>
+  <img class="top-logo" src="assets/ts-logo-right.png" alt="T.S. Serviceleistungen">
+  <a class="admin-link" href="admin.html">Administration</a>
 </header>
 
-<main class="public-main">
-  <section class="hero-card">
+<main>
+  <section class="hero">
     <div class="hero-copy">
-      <small class="eyebrow">ONLINE-ANFRAGE</small>
-      <h1>Ihre Anfrage.<br><span>Unser Service.</span></h1>
-      <p>Wählen Sie einfach den gewünschten Bereich. Ihre Anfrage wird direkt an T.S. Serviceleistungen übermittelt und anschließend von uns geprüft.</p>
-      <div class="hero-pills">
-        <span>✓ Persönlich</span><span>✓ Unverbindliche Anfrage</span><span>✓ Datenschutz</span>
-      </div>
+      <span class="eyebrow">ONLINE-SERVICE</span>
+      <h1>Ihre Anfrage.<br><em>Unser Service.</em></h1>
+      <p>Wählen Sie den gewünschten Bereich aus. Die Anfrage wird anschließend geprüft und von T.S. Serviceleistungen bestätigt.</p>
     </div>
-    <div class="hero-logo-card">
-      <img src="logo-serviceleistungen.png" alt="T.S. Serviceleistungen">
-    </div>
+    <div class="hero-car" aria-hidden="true"></div>
+    <div class="hero-badge"><span>QUALITÄT</span><span>SERVICE</span><span>LEIDENSCHAFT</span></div>
   </section>
 
   <section class="service-section">
-    <div class="section-kicker">SERVICE AUSWÄHLEN</div>
+    <span class="eyebrow">SERVICE AUSWÄHLEN</span>
     <h2>Womit können wir Ihnen helfen?</h2>
-
     <div class="service-grid">
-      <button class="service-card" type="button" onclick="pick('Fahrzeugpflege')">
-        <span class="service-icon">🚗</span>
-        <span><b>Fahrzeugpflege</b><small>Aufbereitung · Politur · Lackversiegelung</small></span><strong>→</strong>
-      </button>
-
-      <a class="service-card service-link" href="https://ts-serviceleistungen.github.io/gartenservice-ts/">
-        <span class="service-icon">🌳</span>
-        <span><b>Gartenarbeiten</b><small>Gartenpflege · Schnitt · Abtransport</small></span><strong>→</strong>
-      </a>
-
-      <button class="service-card service-card-wide" type="button" onclick="pick('Foto & Drohnenfotografie')">
-        <span class="service-icon">📸</span>
-        <span><b>Foto & Drohnenfotografie</b><small>Fahrzeug · Immobilie · Drohnenfoto · Drohnenvideo</small></span><strong>→</strong>
-      </button>
-
-      <button class="service-card" type="button" onclick="pick('Ersatzteilanfrage')">
-        <span class="service-icon">⚙️</span>
-        <span><b>Ersatzteilanfrage</b><small>Ersatzteile und Teilenummern</small></span><strong>→</strong>
-      </button>
-
-      <button class="service-card" type="button" onclick="pick('Reifenanfrage')">
-        <span class="service-icon">🛞</span>
-        <span><b>Reifenanfrage</b><small>Sommer · Winter · Ganzjahr</small></span><strong>→</strong>
-      </button>
-
-      <button class="service-card" type="button" onclick="pick('Zubehörmontage')">
-        <span class="service-icon">🔧</span>
-        <span><b>Zubehörmontage</b><small>Montage und technische Nachrüstung</small></span><strong>→</strong>
-      </button>
+      <button class="service-card" onclick="pick('Fahrzeugpflege')"><span class="service-icon">🚗</span><span><b>Fahrzeugpflege</b><small>Aufbereitung · Politur · Lackversiegelung</small></span><strong>→</strong></button>
+      <button class="service-card" onclick="pick('Gartenarbeiten')"><span class="service-icon">🌳</span><span><b>Gartenarbeiten</b><small>Gartenpflege · Schnitt · Abtransport</small></span><strong>→</strong></button>
+      <button class="service-card service-wide" onclick="pick('Foto & Drohnenfotografie')"><span class="service-icon">📸</span><span><b>Foto &amp; Drohnenfotografie</b><small>Fahrzeug · Immobilie · Drohnenfoto · Drohnenvideo</small></span><strong>→</strong></button>
+      <button class="service-card" onclick="pick('Ersatzteilanfrage')"><span class="service-icon">⚙️</span><span><b>Ersatzteilanfrage</b><small>Ersatzteile und Teilenummern</small></span><strong>→</strong></button>
+      <button class="service-card" onclick="pick('Reifenanfrage')"><span class="service-icon">🛞</span><span><b>Reifenanfrage</b><small>Sommer · Winter · Ganzjahr</small></span><strong>→</strong></button>
+      <button class="service-card" onclick="pick('Zubehörmontage')"><span class="service-icon">🔧</span><span><b>Zubehörmontage</b><small>Montage und technische Nachrüstung</small></span><strong>→</strong></button>
     </div>
   </section>
 
-  <section id="box" class="request-panel hidden">
-    <div class="request-head">
-      <div><small class="eyebrow">ANFRAGE ERSTELLEN</small><h2 id="title">Ihre Anfrage</h2></div>
-      <button type="button" class="back-btn" onclick="closeRequest()">← Auswahl</button>
-    </div>
-
+  <section id="box" class="form-shell hidden">
+    <div class="form-heading"><div><span class="eyebrow">IHRE ANFRAGE</span><h2 id="title">—</h2></div><button type="button" class="back-btn" onclick="resetService()">← Auswahl ändern</button></div>
     <form id="form">
       <input id="service_type" type="hidden">
+      <div id="serviceHint" class="service-hint"></div>
 
-      <div id="vehicleSection">
+      <div id="vehicleBlock">
         <h3>Fahrzeug</h3>
-        <div class="form-grid">
+        <div class="field-grid">
           <label>Fahrzeugart<select id="vehicle_type" required><option value="">Bitte wählen</option><option>PKW</option><option>SUV</option><option>Transporter</option><option>Wohnmobil</option><option>Sonstiges</option></select></label>
-          <label>Hersteller<input id="make"></label>
-          <label>Modell / Typ<input id="model"></label>
+          <label>Hersteller<input id="make" required></label>
+          <label>Modell / Typ<input id="model" required></label>
           <label>Farbe<input id="color"></label>
-          <label>Baujahr<input id="year" type="number"></label>
+          <label>Baujahr<input id="year" type="number" min="1900" max="2100"></label>
           <label>Kennzeichen<input id="plate"></label>
         </div>
       </div>
 
       <div id="care">
-        <h3>Fahrzeugzustand & Leistung</h3>
-        <div class="check-grid">
+        <h3>Fahrzeugzustand &amp; Leistung</h3>
+        <div class="checks">
           <label><input type="checkbox" name="care" value="Außenreinigung"> Außenreinigung</label>
           <label><input type="checkbox" name="care" value="Innenraumreinigung"> Innenraumreinigung</label>
           <label><input type="checkbox" name="care" value="Polsterreinigung"> Polsterreinigung</label>
@@ -102,75 +67,32 @@
           <label><input type="checkbox" name="care" value="Politur"> Politur</label>
           <label><input type="checkbox" name="care" value="Lackversiegelung"> Lackversiegelung</label>
         </div>
-        <div class="form-grid">
+        <div class="field-grid two">
           <label>Verschmutzung<select id="dirt_level"><option>Normal</option><option>Stark</option><option>Sehr stark</option></select></label>
           <label>Tierhaare<select id="pet_hair"><option>Nein</option><option>Ja – gering</option><option>Ja – mittel</option><option>Ja – stark</option></select></label>
         </div>
       </div>
 
-      <div id="photoOptions" class="hidden">
-        <h3>Foto & Drohne</h3>
-        <div class="check-grid">
-          <label><input type="checkbox" name="photo_type" value="Fahrzeugfotografie"> Fahrzeugfotografie</label>
-          <label><input type="checkbox" name="photo_type" value="Immobilienfotografie"> Immobilienfotografie</label>
-          <label><input type="checkbox" name="photo_type" value="Drohnenfotografie"> Drohnenfotografie</label>
-          <label><input type="checkbox" name="photo_type" value="Drohnenvideo"> Drohnenvideo</label>
-          <label><input type="checkbox" name="photo_type" value="Foto & Drohne"> Foto & Drohne</label>
-          <label><input type="checkbox" name="photo_type" value="Foto & Video"> Foto & Video</label>
-        </div>
-      </div>
-
-      <div id="parts" class="hidden">
-        <h3>Details</h3>
-        <label>Teil / Zubehör / Reifen<textarea id="details"></textarea></label>
-        <div class="form-grid">
-          <label>Anzahl<input id="quantity" type="number" min="1" value="1"></label>
-          <label>Reifenart<select id="tire_type"><option>Keine Angabe</option><option>Sommerreifen</option><option>Winterreifen</option><option>Ganzjahresreifen</option></select></label>
-        </div>
-      </div>
-
-      <div id="photoDetails" class="hidden">
-        <h3>Projekt / Aufnahmeort</h3>
-        <label>Adresse / Aufnahmeort<input id="location"></label>
-        <label>Beschreibung<textarea id="photo_message" placeholder="Was soll fotografiert oder gefilmt werden?"></textarea></label>
-      </div>
+      <div id="parts" class="hidden"><h3>Details zur Anfrage</h3><label>Teil / Zubehör / Reifen<textarea id="details" placeholder="Was wird benötigt bzw. montiert?"></textarea></label><div class="field-grid two"><label>Anzahl<input id="quantity" type="number" min="1" value="1"></label><label>Reifenart<select id="tire_type"><option>Keine Angabe</option><option>Sommerreifen</option><option>Winterreifen</option><option>Ganzjahresreifen</option></select></label></div></div>
 
       <h3>Wunschtermin</h3>
-      <div class="form-grid">
-        <label>Datum<input id="requested_date" type="date" required></label>
-        <label>Zeitraum<select id="requested_time"><option>Vormittags</option><option>08:00 – 10:00</option><option>10:00 – 12:00</option><option>13:00 – 15:00</option><option>15:00 – 17:00</option></select></label>
-      </div>
-
-      <p id="durationInfo" class="duration-info"></p>
+      <div class="field-grid two"><label>Datum<input id="requested_date" type="date" required></label><label>Zeitraum<select id="requested_time"><option>Vormittags</option><option>08:00 – 10:00</option><option>10:00 – 12:00</option><option>13:00 – 15:00</option><option>15:00 – 17:00</option></select></label></div>
+      <div id="durationInfo" class="notice"></div>
 
       <h3>Kontaktdaten</h3>
-      <div class="form-grid">
-        <label>Vorname<input id="first_name" required></label>
-        <label>Nachname<input id="last_name" required></label>
-        <label>Telefon<input id="phone" required></label>
-        <label>E-Mail<input id="email" type="email" required></label>
-      </div>
-
-      <label>Nachricht<textarea id="message"></textarea></label>
-      <label>Fotos / Unterlagen<input id="photos" type="file" accept="image/*" multiple></label>
-
-      <label class="privacy-check">
-        <input id="privacy_consent" type="checkbox" required>
-        <span>Ich habe die <a href="datenschutz" target="_blank" rel="noopener">Datenschutzerklärung</a> gelesen und stimme der Verarbeitung meiner angegebenen Daten zur Bearbeitung meiner Anfrage zu.</span>
-      </label>
-
-      <div class="submit-row">
-        <p id="msg" class="notice hidden"></p>
-        <button class="primary submit-btn" type="submit">Anfrage absenden</button>
-      </div>
+      <div class="field-grid"><label>Vorname<input id="first_name" required></label><label>Nachname<input id="last_name" required></label><label>Telefon<input id="phone" required></label><label>E-Mail<input id="email" type="email" required></label></div>
+      <label>Nachricht<textarea id="message" placeholder="Weitere Informationen, Wünsche oder Besonderheiten"></textarea></label>
+      <label class="upload">Fotos<input id="photos" type="file" accept="image/*" multiple><small>Optional – mehrere Bilder möglich</small></label>
+      <label class="privacy"><input id="privacy_consent" type="checkbox" required> Ich akzeptiere die <a href="datenschutz.html" target="_blank" rel="noopener">Datenschutzerklärung</a>.</label>
+      <button class="submit-btn" type="submit">Anfrage absenden <span>→</span></button>
+      <p id="msg" class="notice hidden"></p>
     </form>
   </section>
 </main>
 
-<footer>© T.S. Serviceleistungen · <a href="datenschutz">Datenschutz</a> · <a href="admin.html">Admin-Login</a></footer>
-
+<footer><span>© T.S. Serviceleistungen</span><a href="datenschutz.html">Datenschutz</a><a href="admin.html">Admin Login</a></footer>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
-<script src="app.js"></script>
+<script src="app.js?v=20261005"></script>
 </body>
 </html>
