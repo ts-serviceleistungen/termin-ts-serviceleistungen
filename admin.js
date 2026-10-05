@@ -461,76 +461,60 @@ function syncAllReceiptsToGoogle(rows){
   rows.forEach(row=>syncReceiptToGoogle(row));
 }
 
-function parseMoneyValue(value){
-  if(value===null||value===undefined||value==='')return 0;
-  if(typeof value==='number')return Number.isFinite(value)?value:0;
-  let s=String(value).trim().replace(/€/g,'').replace(/\s/g,'');
-  if(!s)return 0;
-  if(s.includes(',')&&s.includes('.'))s=s.replace(/\./g,'').replace(',','.');
-  else if(s.includes(','))s=s.replace(',','.');
-  const n=Number(s);
-  return Number.isFinite(n)?n:0;
-}
-function invoiceAmount(row){
-  if(!row)return 0;
-  const keys=['bruttobetrag','brutto','gesamtbetrag','gesamtbetragbrutto','betrag','summe','amount'];
-  for(const key of keys){
-    if(row[key]!==undefined&&row[key]!==null&&row[key]!=='')return parseMoneyValue(row[key]);
-  }
-  return 0;
-}
-function invoiceDate(row){
-  if(!row)return '';
-  const keys=['rechnungsdatum','datum','date','invoice_date','created_at'];
-  for(const key of keys){
-    if(row[key]!==undefined&&row[key]!==null&&String(row[key]).trim()!=='')return String(row[key]);
-  }
-  return '';
-}
-
 async function loadFinancials(){
   const now=new Date();
   const year=now.getFullYear();
   const month=now.getMonth()+1;
-  if(financialYearLabel)financialYearLabel.textContent=String(year);
-  if(financialYearLabel2)financialYearLabel2.textContent=String(year);
-  if(financialMonthLabel)financialMonthLabel.textContent=now.toLocaleDateString('de-DE',{month:'long',year:'numeric'});
+  if(financialYearLabel) financialYearLabel.textContent=String(year);
+  if(financialYearLabel2) financialYearLabel2.textContent=String(year);
+  if(financialMonthLabel) financialMonthLabel.textContent=now.toLocaleDateString('de-DE',{month:'long',year:'numeric'});
 
   let invoiceYear=0, invoiceMonth=0;
   let monthlyInvoices=Array.from({length:12},()=>0);
 
+  // First load the invoice API. A failure must NOT prevent the expense side
+  // of the financial overview from being rendered.
   try{
     const response=await fetch(`${RECHNUNGS_API_URL}?year=${year}&v=${Date.now()}`,{cache:'no-store'});
     const result=await response.json().catch(()=>({}));
-    if(response.ok&&result.ok!==false){
-      const rows=Array.isArray(result.rechnungen)?result.rechnungen:[];
+    if(response.ok && result.ok!==false){
+      invoiceYear=Number(result.bruttoGesamtJahr ?? result.bruttoGesamt ?? 0)||0;
+      if(Array.isArray(result.monatlich)){
+        result.monatlich.forEach((v,i)=>{if(i<12) monthlyInvoices[i]=Number(v)||0;});
+      }
+      invoiceMonth=Number(result.bruttoGesamtMonat ?? monthlyInvoices[month-1] ?? 0)||0;
 
-      // Die Rechnungszeilen sind die verlässlichste Quelle für die Monatswerte.
-      // Dadurch funktionieren auch deutsche Betragsformate wie 1.234,56 €.
-      if(rows.length){
-        rows.forEach(row=>{
-          const d=parseFlexibleDate(invoiceDate(row));
-          const amount=invoiceAmount(row);
-          if(d&&d.getFullYear()===year){
-            invoiceYear+=amount;
-            monthlyInvoices[d.getMonth()]+=amount;
-          }
-        });
-        invoiceMonth=monthlyInvoices[month-1]||0;
-      }else{
-        // Fallback auf die Summen, wenn die API aktuell keine Einzelrechnungen liefert.
-        invoiceYear=parseMoneyValue(result.bruttoGesamtJahr??result.bruttoGesamt??0);
-        invoiceMonth=parseMoneyValue(result.bruttoGesamtMonat??0);
-        if(Array.isArray(result.monatlich)){
-          result.monatlich.forEach((v,i)=>{if(i<12)monthlyInvoices[i]=parseMoneyValue(v);});
-        }else if(result.monatlich&&typeof result.monatlich==='object'){
-          Object.entries(result.monatlich).forEach(([key,value])=>{
-            const i=Number(key);
-            if(Number.isInteger(i)&&i>=0&&i<12)monthlyInvoices[i]=parseMoneyValue(value);
+      // Monatswerte robust aus den gelieferten Rechnungszeilen ableiten.
+      // Wichtig: Das bestehende Dashboard-Design und alle anderen Berechnungen bleiben unverändert.
+      if(Array.isArray(result.rechnungen) && result.rechnungen.length){
+        const parsed=result.rechnungen.map(r=>({
+          amount:parseInvoiceMoney(
+            r.bruttobetrag ?? r.brutto ?? r.gesamtbetrag ?? r.gesamt ?? r.betrag ?? r.amount ?? r.summe ?? 0
+          ),
+          date:String(
+            r.rechnungsdatum ?? r.datum ?? r.date ?? r.invoice_date ?? r.rechnungsDate ?? r.created_at ?? ''
+          ).trim()
+        })).filter(r=>r.amount!==0 || r.date);
+
+        // Nur dann aus Einzelrechnungen berechnen, wenn die API keine brauchbaren
+        // Monatswerte geliefert hat. So werden Werte nicht doppelt addiert.
+        const apiMonthlyHasValues=monthlyInvoices.some(v=>Number(v)>0);
+        if(!apiMonthlyHasValues){
+          monthlyInvoices=Array.from({length:12},()=>0);
+          parsed.forEach(r=>{
+            const d=parseFlexibleDate(r.date);
+            if(d && d.getFullYear()===year) monthlyInvoices[d.getMonth()]+=r.amount;
           });
         }
-        if(!invoiceYear)invoiceYear=monthlyInvoices.reduce((a,b)=>a+b,0);
-        if(!invoiceMonth)invoiceMonth=monthlyInvoices[month-1]||0;
+
+        // Falls die API-Jahressumme nicht vorhanden wäre, ebenfalls aus den Zeilen rechnen.
+        if(!invoiceYear){
+          invoiceYear=parsed.reduce((sum,r)=>{
+            const d=parseFlexibleDate(r.date);
+            return d && d.getFullYear()===year ? sum+r.amount : sum;
+          },0);
+        }
+        invoiceMonth=monthlyInvoices[month-1]||0;
       }
     }else{
       console.warn('Rechnungsdaten:',result.error||'API nicht erreichbar');
@@ -540,17 +524,17 @@ async function loadFinancials(){
   }
 
   const receiptTotals=window.receiptTotals||{year:{gross:0},month:{gross:0}};
-  const expenseYear=parseMoneyValue(receiptTotals.year?.gross||0);
-  const expenseMonth=parseMoneyValue(receiptTotals.month?.gross||0);
+  const expenseYear=Number(receiptTotals.year?.gross||0);
+  const expenseMonth=Number(receiptTotals.month?.gross||0);
 
-  if(dashInvoiceGross)dashInvoiceGross.textContent=euro(invoiceYear);
-  if(dashInvoiceMonth)dashInvoiceMonth.textContent=euro(invoiceMonth);
-  if(dashProfit)dashProfit.textContent=euro(invoiceYear-expenseYear);
-  if(dashProfitMonth)dashProfitMonth.textContent=euro(invoiceMonth-expenseMonth);
+  if(dashInvoiceGross) dashInvoiceGross.textContent=euro(invoiceYear);
+  if(dashInvoiceMonth) dashInvoiceMonth.textContent=euro(invoiceMonth);
+  if(dashProfit) dashProfit.textContent=euro(invoiceYear-expenseYear);
+  if(dashProfitMonth) dashProfitMonth.textContent=euro(invoiceMonth-expenseMonth);
 
   if(financialMonthlyTable){
     const rows=monthlyInvoices.map((income,i)=>{
-      const expense=parseMoneyValue(window.receiptMonthlyTotals?.[i]||0);
+      const expense=Number(window.receiptMonthlyTotals?.[i]||0);
       const profit=income-expense;
       const name=new Date(year,i,1).toLocaleDateString('de-DE',{month:'long'});
       return {name,income,expense,profit};
@@ -562,15 +546,29 @@ async function loadFinancials(){
       chart.innerHTML=rows.map(r=>{
         const ih=Math.max(2,Math.round(r.income/max*100));
         const eh=Math.max(2,Math.round(r.expense/max*100));
-        return `<div class="chart-month" title="${escapeHtml(r.name)}: Einnahmen ${euro(r.income)}, Ausgaben ${euro(r.expense)}"><div class="chart-bars"><span class="bar income" style="height:${ih}%"></span><span class="bar expense" style="height:${eh}%"></span></div><small>${escapeHtml(r.name.slice(0,3))}</small></div>`;
+        return `<div class=\"chart-month\" title=\"${escapeHtml(r.name)}: Einnahmen ${euro(r.income)}, Ausgaben ${euro(r.expense)}\"><div class=\"chart-bars\"><span class=\"bar income\" style=\"height:${ih}%\"></span><span class=\"bar expense\" style=\"height:${eh}%\"></span></div><small>${escapeHtml(r.name.slice(0,3))}</small></div>`;
       }).join('');
     }
   }
 }
 
+function parseInvoiceMoney(value){
+  if(typeof value==='number') return Number.isFinite(value)?value:0;
+  let s=String(value??'').trim();
+  if(!s)return 0;
+  s=s.replace(/€/g,'').replace(/\s/g,'');
+  // Deutsche Schreibweise: 1.234,56 -> 1234.56
+  if(s.includes(',') && s.includes('.')) s=s.replace(/\./g,'').replace(',','.');
+  else if(s.includes(',')) s=s.replace(',','.');
+  // Falls nur Tausenderpunkte vorhanden sind: 1.234 -> 1234
+  else if(/^[-+]?\d{1,3}(?:\.\d{3})+$/.test(s)) s=s.replace(/\./g,'');
+  const n=Number(s);
+  return Number.isFinite(n)?n:0;
+}
+
 function parseFlexibleDate(value){
   if(!value)return null;
-  if(value instanceof Date&&!isNaN(value))return value;
+  if(value instanceof Date && !isNaN(value))return value;
   const s=String(value).trim();
   let m=s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
   if(m)return new Date(Number(m[3]),Number(m[2])-1,Number(m[1]));
