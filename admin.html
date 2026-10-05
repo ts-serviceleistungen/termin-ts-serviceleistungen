@@ -3,226 +3,170 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>T.S. Serviceleistungen – Admin</title>
-<link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="admin-style.css?v=gold2">
-<meta name="theme-color" content="#090909">
+<meta name="theme-color" content="#c9a246">
+<title>T.S. Serviceleistungen – Administration</title>
+<link rel="stylesheet" href="admin-style.css">
 </head>
 <body>
+
 <header class="admin-header">
-  <div class="header-logo header-logo-left">
-    <img src="logo-fahrzeugpflege.png" alt="T.S. Fahrzeugpflege &amp; Technik">
-  </div>
-  <a class="admin-brand" href="index.html">
-    <strong>T.S. SERVICELEISTUNGEN</strong>
-    <span>ADMIN</span>
-  </a>
-  <div class="header-logo header-logo-right">
-    <img src="logo-serviceleistungen.png" alt="T.S. Serviceleistungen">
-  </div>
-  <div class="header-actions">
-    <button id="installApp" class="install-btn" type="button">＋ App installieren</button>
+  <div class="header-logo left"><img src="logo-fahrzeugpflege.png" alt="T.S. Fahrzeugpflege & Technik"></div>
+  <div class="header-title"><b>T.S. SERVICELEISTUNGEN</b><span>ADMINISTRATION</span></div>
+  <div class="header-right">
+    <div class="header-logo right"><img src="logo-serviceleistungen.png" alt="T.S. Serviceleistungen"></div>
+    <span id="user" class="user-badge"></span>
     <button id="logout" class="logout-btn">Abmelden</button>
   </div>
 </header>
 
-<main>
-  <section id="login" class="panel login">
-    <small>ADMIN LOGIN</small>
-    <h1>Verwaltung</h1>
-    <form id="loginForm">
-      <label>E-Mail<input id="email" type="email" required></label>
-      <label>Passwort<input id="password" type="password" required></label>
-      <button class="primary">Anmelden</button>
-      <p id="loginMsg" class="notice hidden"></p>
-    </form>
-  </section>
+<main class="admin-main">
 
-  <section id="dash" class="hidden">
-    <div class="title">
-      <div><small>VERWALTUNG</small><h1 id="pageTitle">Dashboard</h1></div>
-      <button id="refresh" class="primary">Aktualisieren</button>
+<section id="login" class="login-screen">
+  <div class="login-card">
+    <div class="login-logo"><img src="logo-serviceleistungen.png" alt="T.S. Serviceleistungen"></div>
+    <small>GESCHÜTZTER BEREICH</small>
+    <h1>Willkommen zurück</h1>
+    <p>Bitte melden Sie sich an, um die Administration zu öffnen.</p>
+    <form id="loginForm">
+      <label>E-Mail<input id="email" type="email" required autocomplete="username"></label>
+      <label>Passwort<input id="password" type="password" required autocomplete="current-password"></label>
+      <button class="gold-btn" type="submit">Anmelden →</button>
+      <p id="loginMsg" class="login-msg hidden"></p>
+    </form>
+    <a class="back-public" href="index.html">← Zur öffentlichen Anfrage-Seite</a>
+  </div>
+</section>
+
+<section id="dash" class="hidden">
+
+  <div class="welcome-hero">
+    <div class="hero-overlay">
+      <div>
+        <small>TS SERVICELEISTUNGEN · ADMINISTRATION</small>
+        <h1>Mehr als nur Service<br><span>für Fahrzeuge & Immobilien</span></h1>
+        <p>Willkommen in deiner zentralen Verwaltung. Wähle einen Bereich aus.</p>
+      </div>
+      <div class="hero-services">
+        <span>🚗 Fahrzeugpflege</span><span>🛞 Reifen & Zubehör</span><span>📸 Foto & Drohne</span><span>⚙️ Ersatzteile & Tuning</span>
+      </div>
+    </div>
+  </div>
+
+  <section id="dashboardHome">
+    <div class="section-heading">
+      <div><small>VERWALTUNG</small><h1>Übersicht</h1></div>
+      <button id="refresh" class="gold-btn">↻ Aktualisieren</button>
     </div>
 
-    <nav id="adminNav" class="admin-nav">
-      <button type="button" class="primary" data-nav="dashboard">⌂&nbsp; Dashboard</button>
-      <button type="button" data-nav="requests">▣&nbsp; Terminanfragen</button>
-      <button type="button" data-nav="receipts">▤&nbsp; Belege</button>
-    </nav>
+    <div class="menu-grid">
+      <button class="menu-card active" data-nav="dashboard"><span class="menu-icon">▦</span><b>Dashboard</b><small>Übersicht und Auswertungen</small><i>→</i></button>
+      <button class="menu-card" data-nav="requests"><span class="menu-icon">◫</span><b>Terminanfragen</b><small>Kundenanfragen verwalten</small><i>→</i></button>
+      <button class="menu-card" data-scroll="appointments"><span class="menu-icon">✓</span><b>Aufträge</b><small>Aktive und erledigte Aufträge</small><i>→</i></button>
+      <button class="menu-card" data-scroll="financial"><span class="menu-icon">€</span><b>Rechnungen</b><small>Rechnungen und Zahlungseingänge</small><i>→</i></button>
+      <button class="menu-card" data-nav="receipts"><span class="menu-icon">▤</span><b>Belege</b><small>Belege und Ausgaben</small><i>→</i></button>
+      <button class="menu-card offers-card" data-scroll="offers"><span class="menu-icon">▧</span><b>Angebote</b><small>Angebote und mögliche Einnahmen</small><i>→</i></button>
+      <button class="menu-card" data-scroll="appointments"><span class="menu-icon">▣</span><b>Kalender</b><small>Termine und Schichten</small><i>→</i></button>
+      <button class="menu-card" data-scroll="appointments"><span class="menu-icon">♙</span><b>Kunden & Firmen</b><small>Stammdaten verwalten</small><i>→</i></button>
+      <button class="menu-card" data-scroll="settings"><span class="menu-icon">⚙</span><b>Einstellungen</b><small>Benutzer, Vorlagen und mehr</small><i>→</i></button>
+    </div>
 
-    <section id="dashboardHome">
-      <div class="stats">
-        <div><b id="dashNew">0</b><small>Neue Terminanfragen</small></div>
-        <div><b id="dashOpen">0</b><small>Offene Terminanfragen</small></div>
-        <div><b id="dashToday">0</b><small>Termine heute</small></div>
-      </div>
+    <div class="stats-grid">
+      <div class="metric"><span>Neue Terminanfragen</span><strong id="dashNew">0</strong><small>aktuell</small></div>
+      <div class="metric"><span>Offene Terminanfragen</span><strong id="dashOpen">0</strong><small>in Bearbeitung</small></div>
+      <div class="metric"><span>Termine heute</span><strong id="dashToday">0</strong><small>heute</small></div>
+      <div class="metric"><span>Belege gesamt</span><strong id="dashReceiptCount">0</strong><small>Archiv</small></div>
+      <div class="metric money"><span>Ausgaben dieses Jahr · brutto</span><strong id="dashYearGross">0,00 €</strong><small id="financialYearLabel">2026</small></div>
+      <div class="metric money"><span>Ausgaben diesen Monat · brutto</span><strong id="dashMonthGross">0,00 €</strong><small id="financialMonthLabel">—</small></div>
+      <div class="metric money income"><span>Rechnungen · Brutto gesamt</span><strong id="dashInvoiceGross">0,00 €</strong><small>aktuelles Jahr</small></div>
+      <div class="metric profit"><span>Gewinn · Einnahmen minus Ausgaben</span><strong id="dashProfit">0,00 €</strong><small>aktuelles Jahr</small></div>
+    </div>
 
-      <div class="stats" style="margin-top:16px">
-        <div><b id="dashReceiptCount">0</b><small>Belege gesamt</small></div>
-        <div><b id="dashYearGross">0,00 €</b><small>Ausgaben dieses Jahr · brutto</small></div>
-        <div><b id="dashMonthGross">0,00 €</b><small>Ausgaben diesen Monat · brutto</small></div>
-      </div>
-
-      <div class="stats financial-stats" style="margin-top:16px">
-        <div><b id="dashInvoiceGross">0,00 €</b><small>Rechnungen dieses Jahr · brutto <span id="financialYearLabel"></span></small></div>
-        <div><b id="dashProfit">0,00 €</b><small>Gewinn dieses Jahr · brutto</small></div>
-        <div><b id="dashInvoiceMonth">0,00 €</b><small>Rechnungen diesen Monat · brutto</small></div>
-        <div><b id="dashProfitMonth">0,00 €</b><small>Gewinn diesen Monat · brutto</small></div>
-      </div>
-
-      <section class="panel financial-panel" style="margin-top:20px">
-        <div class="head"><b>Finanzübersicht <span id="financialMonthLabel"></span></b></div>
-        <div class="financial-table-wrap">
-          <table class="financial-table">
-            <thead>
-              <tr><th>Monat</th><th>Einnahmen</th><th>Ausgaben</th><th>Gewinn</th></tr>
-            </thead>
-            <tbody id="financialMonthlyTable"></tbody>
-          </table>
+    <section class="content-grid">
+      <div class="content-card" id="appointments">
+        <div class="card-heading"><div><small>TERMINE</small><h2 id="appointmentTitle">Termine</h2></div><span id="appointmentSummary"></span></div>
+        <div class="calendar-toolbar">
+          <button id="appointmentPrev">‹</button><button id="appointmentToday" class="today-btn">Heute</button><button id="appointmentNext">›</button>
+          <div class="view-switch"><button class="appt-view active" data-view="day">Tag</button><button class="appt-view" data-view="week">Woche</button><button class="appt-view" data-view="month">Monat</button></div>
         </div>
-      </section>
-
-      <section class="panel quick-panel" style="margin-top:20px">
-        <div class="head"><b>Schnellzugriff</b><span id="user"></span></div>
-        <div style="display:flex;flex-wrap:wrap;gap:10px">
-          <button type="button" class="primary" data-nav="requests">Terminanfragen öffnen</button>
-          <button type="button" data-nav="receipts">Belege öffnen</button>
-        </div>
-      </section>
-    </section>
-
-    <section id="requestsView" class="hidden">
-      <div class="stats">
-        <div><b id="newc">0</b><small>Neue</small></div>
-        <div><b id="open">0</b><small>Offen</small></div>
-        <div><b id="today">0</b><small>Heute</small></div>
-      </div>
-
-      <section class="panel calendar-panel" style="margin-top:20px">
-        <div class="head">
-          <div><b>Admin-Kalender</b><small id="appointmentSummary" style="display:block">Termine</small></div>
-          <div class="calendar-toolbar">
-            <button type="button" id="appointmentToday">Heute</button>
-            <button type="button" id="appointmentPrev">‹</button>
-            <button type="button" id="appointmentNext">›</button>
-          </div>
-        </div>
-        <div class="calendar-view-buttons">
-          <button type="button" class="appt-view active" data-view="day">Tag</button>
-          <button type="button" class="appt-view" data-view="week">Woche</button>
-          <button type="button" class="appt-view" data-view="month">Monat</button>
-        </div>
-        <h3 id="appointmentTitle" class="appointment-title"></h3>
         <div id="appointmentOverview"></div>
-      </section>
+      </div>
 
-      <section class="panel calendar-filter-panel">
-        <div class="calendar-filter-grid">
-          <input id="searchFilter" type="search" placeholder="Kunde, Fahrzeug, Leistung …">
-          <select id="statusFilter">
-            <option value="">Alle Status</option>
-            <option>Neue Anfrage</option><option>Bestätigt</option><option>Alternativtermin</option><option>Abgelehnt</option><option>Abgeschlossen</option>
-          </select>
-          <input id="dateFilter" type="date">
-          <button type="button" id="clearFilters">Filter zurücksetzen</button>
-        </div>
-        <small id="filterCount" class="filter-count">0 von 0</small>
-        <div class="head calendar-month-head">
-          <b id="calendarTitle">Kalender</b>
-          <div class="calendar-toolbar"><button type="button" id="prevMonth">‹</button><button type="button" id="nextMonth">›</button></div>
-        </div>
-        <div id="calendar" class="calendar-grid"></div>
-      </section>
-
-      <section class="panel">
-        <div class="head"><b>Anfragen</b><span></span></div>
-        <div id="list"></div>
-      </section>
+      <div class="content-card" id="financial">
+        <div class="card-heading"><div><small>FINANZEN</small><h2>Jahresübersicht</h2></div></div>
+        <div class="finance-mini"><div><span>Rechnungen Monat</span><b id="dashInvoiceMonth">0,00 €</b></div><div><span>Gewinn Monat</span><b id="dashProfitMonth">0,00 €</b></div></div>
+        <table class="finance-table"><thead><tr><th>Monat</th><th>Einnahmen</th><th>Ausgaben</th><th>Gewinn</th></tr></thead><tbody id="financialMonthlyTable"></tbody></table>
+      </div>
     </section>
 
+    <section class="content-card offers-preview" id="offers">
+      <div class="card-heading"><div><small>ANGEBOTE</small><h2>Angebote</h2><p>Eigener Bereich für Angebote und mögliche Einnahmen – getrennt von Einnahmen, Ausgaben und Gewinn.</p></div><span class="planned">VORBEREITET</span></div>
+      <div class="offer-summary-grid">
+        <div><span>Gesamtwert aller Angebote</span><b>—</b></div><div><span>Angenommen</span><b>—</b></div><div><span>Offen / In Bearbeitung</span><b>—</b></div><div><span>Abgelehnt</span><b>—</b></div>
+      </div>
+      <div class="empty-offers">Die Angebotsverwaltung wird separat angeschlossen. Sie verändert die bestehenden Einnahmen-/Ausgaben-/Gewinnberechnungen nicht.</div>
+    </section>
 
-    <section id="receiptsView" class="hidden">
-      <section class="panel">
-        <div class="head"><b>Beleg / Rechnung hochladen</b></div>
-        <form id="receiptForm" style="display:grid;gap:12px">
-          <label>Dokument auswählen
-            <input id="receiptImage" type="file" accept="image/*,application/pdf" capture="environment" required>
-          </label>
-          <p class="notice" style="margin:0">📤 Bild oder PDF auswählen. Die KI-Auslesung startet automatisch; bei PDFs wird die erste Seite analysiert.</p>
-          <button type="button" id="ocrReceipt" class="primary">🔎 Beleg / Rechnung jetzt auslesen</button>
-          <p id="ocrMsg" class="notice hidden"></p>
-          <label>Datum
-            <input id="receiptDate" type="date" required>
-          </label>
-          <label>Händler / Geschäft
-            <input id="receiptMerchant" type="text" placeholder="z. B. ATU">
-          </label>
-          <label>Belegnummer
-            <input id="receiptNumber" type="text">
-          </label>
-          <label>Bruttobetrag (€)
-            <input id="receiptGross" type="number" min="0" step="0.01" inputmode="decimal">
-          </label>
-          <label>Kategorie
-            <select id="receiptCategory">
-              <option value="KFZ">KFZ</option>
-              <option value="Kraftstoff">Kraftstoff</option>
-              <option value="Ersatzteile">Ersatzteile</option>
-              <option value="Betriebsmittel">Betriebsmittel</option>
-              <option value="Büro">Büro</option>
-              <option value="Sonstiges">Sonstiges</option>
-            </select>
-          </label>
-          <label>Beschreibung
-            <input id="receiptDescription" type="text">
-          </label>
-          <label>Zahlungsart
-            <select id="receiptPayment">
-              <option value="Bar">Bar</option>
-              <option value="EC/Karte">EC/Karte</option>
-              <option value="Überweisung">Überweisung</option>
-              <option value="Sonstiges">Sonstiges</option>
-            </select>
-          </label>
-          <p id="receiptMsg" class="notice hidden"></p>
-          <button class="primary" type="submit" id="saveReceiptBtn">📤 Beleg / Rechnung hochladen</button>
-        </form>
-      </section>
-
-      <section class="panel quick-panel" style="margin-top:20px">
-        <div class="head"><b>Alle Belege</b></div>
-        <div id="receiptList"><p>Belege werden geladen...</p></div>
-      </section>
+    <section class="content-card" id="settings">
+      <div class="card-heading"><div><small>SYSTEM</small><h2>Einstellungen</h2></div></div>
+      <p class="muted">Systemeinstellungen und weitere Verwaltung werden hier künftig gesammelt.</p>
     </section>
   </section>
+
+  <section id="requestsView" class="hidden inner-view">
+    <div class="inner-top"><button class="back-selection" data-nav="dashboard">← Zurück zur Auswahl</button><button id="refreshRequests" class="gold-btn" type="button">↻ Aktualisieren</button></div>
+    <div class="section-heading"><div><small>TERMINE & ANFRAGEN</small><h1>Terminanfragen</h1></div></div>
+    <div class="filter-card">
+      <input id="searchFilter" placeholder="Kunde, Fahrzeug, Leistung …">
+      <select id="statusFilter"><option value="">Alle Status</option><option>Neue Anfrage</option><option>Bestätigt</option><option>Alternativtermin</option><option>Abgelehnt</option><option>Abgeschlossen</option></select>
+      <input id="dateFilter" type="date">
+      <button id="clearFilters" type="button">Filter zurücksetzen</button>
+      <span id="filterCount">0 von 0</span>
+    </div>
+    <div class="calendar-panel"><div class="calendar-head"><b id="calendarTitle">Kalender</b><div><button id="prevMonth">‹</button><button id="nextMonth">›</button></div></div><div id="calendar"></div></div>
+    <div class="request-list" id="list"></div>
+  </section>
+
+  <section id="receiptsView" class="hidden inner-view">
+    <div class="inner-top"><button class="back-selection" data-nav="dashboard">← Zurück zur Auswahl</button></div>
+    <div class="section-heading"><div><small>BELEGE</small><h1>Belege & Ausgaben</h1></div></div>
+    <div class="receipt-layout">
+      <form id="receiptForm" class="content-card receipt-form">
+        <div class="card-heading"><div><small>ARCHIV</small><h2>Beleg / Rechnung hochladen</h2></div></div>
+        <label>Datei<input id="receiptImage" type="file" accept="image/*,application/pdf" required></label>
+        <p id="ocrMsg" class="notice hidden"></p>
+        <div class="form-grid"><label>Belegdatum<input id="receiptDate" type="date" required></label><label>Händler<input id="receiptMerchant"></label><label>Belegnummer<input id="receiptNumber"></label><label>Bruttobetrag<input id="receiptGross" type="number" step="0.01" min="0" required></label><label>Kategorie<select id="receiptCategory"><option>Fahrzeug</option><option>Material</option><option>Tanken</option><option>Werkzeug</option><option>Versicherung</option><option>Werbung</option><option>Sonstiges</option></select></label><label>Zahlungsart<select id="receiptPayment"><option>Bar</option><option>EC/Karte</option><option>Überweisung</option><option>Sonstiges</option></select></label></div>
+        <label>Beschreibung<textarea id="receiptDescription"></textarea></label>
+        <p id="receiptMsg" class="notice hidden"></p>
+        <button id="saveReceiptBtn" class="gold-btn" type="submit">📤 Beleg / Rechnung hochladen</button>
+      </form>
+      <div class="content-card"><div class="card-heading"><div><small>ARCHIV</small><h2>Alle Belege</h2></div></div><div id="receiptList">Belege werden geladen …</div></div>
+    </div>
+  </section>
+
+</section>
 </main>
 
 <div id="detailModal" class="modal hidden">
   <div class="modal-card">
-    <div class="modal-head">
-      <div><small>ANFRAGE</small><h2 id="detailTitle">Details</h2></div>
-      <button id="closeModal" class="close">×</button>
-    </div>
+    <div class="modal-head"><div><small>ANFRAGE</small><h2 id="detailTitle">Details</h2></div><button id="closeModal" class="close">×</button></div>
     <div id="detailBody"></div>
     <div id="detailActions" class="modal-actions"></div>
   </div>
 </div>
 
-<div id="installHelp" class="install-help hidden">
-  <div class="install-help-card">
-    <button id="closeInstallHelp" class="close" type="button">×</button>
-    <small>T.S. SERVICELEISTUNGEN</small>
-    <h2>App auf dem Handy installieren</h2>
-    <p id="installHelpText">Die Verwaltung kann als App auf dem Startbildschirm abgelegt werden.</p>
-  </div>
-</div>
-
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script>window.pdfjsLib && (window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js");</script>
 <script src="config.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="admin.js?v=finanz-final-20260925-2215"></script>
-<script src="pwa.js?v=2"></script>
+<script src="admin.js?v=whitegold20261005"></script>
+<script>
+(function(){
+  function scrollToId(id){document.getElementById(id)?.scrollIntoView({behavior:'smooth',block:'start'});}
+  document.querySelectorAll('[data-scroll]').forEach(btn=>btn.addEventListener('click',()=>scrollToId(btn.dataset.scroll)));
+  document.querySelectorAll('[data-nav]').forEach(btn=>btn.addEventListener('click',()=>{
+    if(typeof showView==='function') showView(btn.dataset.nav);
+    window.scrollTo({top:0,behavior:'smooth'});
+  }));
+  document.getElementById('refreshRequests')?.addEventListener('click',()=>typeof load==='function'&&load());
+})();
+</script>
 </body>
 </html>
