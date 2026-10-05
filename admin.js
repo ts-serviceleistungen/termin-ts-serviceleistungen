@@ -460,114 +460,71 @@ function syncAllReceiptsToGoogle(rows){
   rows.forEach(row=>syncReceiptToGoogle(row));
 }
 
-function parseMoneyValue(value){
-  if(typeof value==='number')return Number.isFinite(value)?value:0;
-  let s=String(value??'').trim();
-  if(!s)return 0;
-  s=s.replace(/€/g,'').replace(/\s/g,'');
-  if(s.includes(',')&&s.includes('.'))s=s.replace(/\./g,'').replace(',','.');
-  else if(s.includes(','))s=s.replace(',','.');
-  const n=Number(s);
-  return Number.isFinite(n)?n:0;
-}
-
-function invoiceRowAmount(row){
-  return parseMoneyValue(row?.bruttobetrag ?? row?.brutto ?? row?.betrag ?? row?.gesamtbetrag ?? row?.gesamt ?? row?.amount ?? 0);
-}
-
-function invoiceRowDate(row){
-  return row?.rechnungsdatum ?? row?.datum ?? row?.date ?? row?.invoice_date ?? row?.created_at ?? '';
-}
-
 async function loadFinancials(){
-  const now=new Date();
-  const year=now.getFullYear();
-  const month=now.getMonth()+1;
-  if(financialYearLabel) financialYearLabel.textContent=String(year);
-  if(financialYearLabel2) financialYearLabel2.textContent=String(year);
-  if(financialMonthLabel) financialMonthLabel.textContent=now.toLocaleDateString('de-DE',{month:'long',year:'numeric'});
+  const year = new Date().getFullYear();
+  const month = new Date().getMonth()+1;
+  if(financialYearLabel) financialYearLabel.textContent = String(year);
+  if(financialMonthLabel) financialMonthLabel.textContent = new Date().toLocaleDateString('de-DE',{month:'long',year:'numeric'});
 
-  let invoiceYear=0;
-  let invoiceMonth=0;
-  const monthlyInvoices=Array.from({length:12},()=>0);
-  let invoiceRows=[];
+  let invoiceYear = 0;
+  let invoiceMonth = 0;
+  let monthlyInvoices = Array.from({length:12},()=>0);
 
   try{
-    const response=await fetch(`${RECHNUNGS_API_URL}?year=${year}&v=${Date.now()}`,{cache:'no-store'});
-    const result=await response.json().catch(()=>({}));
-    if(response.ok && result.ok!==false){
-      invoiceRows=Array.isArray(result.rechnungen)?result.rechnungen:[];
+    const response = await fetch(`${RECHNUNGS_API_URL}?v=${year}`,{cache:'no-store'});
+    const result = await response.json().catch(()=>({}));
+    if(!response.ok || result.ok===false) throw new Error(result.error||`Google-Rechnungs-API nicht erreichbar (HTTP ${response.status}).`);
 
-      // 1. Monatssummen aus der API übernehmen, wenn vorhanden.
-      if(Array.isArray(result.monatlich)){
-        result.monatlich.slice(0,12).forEach((v,i)=>monthlyInvoices[i]=parseMoneyValue(v));
-      }else if(result.monatlich && typeof result.monatlich==='object'){
-        Object.entries(result.monatlich).forEach(([key,val])=>{
-          const i=Number(key)-1;
-          if(i>=0&&i<12)monthlyInvoices[i]=parseMoneyValue(val);
-        });
-      }
+    // Kompatibel mit dem aktuellen T.S.-Google-Script:
+    // Die bisherige API liefert bruttoGesamt. Neuere Versionen können
+    // zusätzlich bruttoGesamtJahr, bruttoGesamtMonat und monatlich liefern.
+    invoiceYear = Number(result.bruttoGesamtJahr ?? result.bruttoGesamt ?? 0);
 
-      // 2. Sicherheits-Fallback: direkt aus den gelieferten Rechnungen rechnen.
-      // Das ist besonders wichtig bei TT.MM.JJJJ und Beträgen wie 1.234,56 €.
-      const rowMonthly=Array.from({length:12},()=>0);
-      let rowYear=0;
-      invoiceRows.forEach(row=>{
-        const d=parseFlexibleDate(invoiceRowDate(row));
-        const amount=invoiceRowAmount(row);
-        if(d && d.getFullYear()===year){
-          rowYear+=amount;
-          rowMonthly[d.getMonth()]+=amount;
-        }
-      });
-
-      if(monthlyInvoices.every(v=>v===0) && rowYear>0){
-        rowMonthly.forEach((v,i)=>monthlyInvoices[i]=v);
-      }
-
-      invoiceYear=parseMoneyValue(result.bruttoGesamtJahr ?? result.bruttoGesamt ?? 0);
-      if(invoiceYear===0 && rowYear>0)invoiceYear=rowYear;
-
-      invoiceMonth=parseMoneyValue(result.bruttoGesamtMonat ?? 0);
-      if(invoiceMonth===0)invoiceMonth=monthlyInvoices[month-1]||0;
+    if(result.bruttoGesamtMonat !== undefined){
+      invoiceMonth = Number(result.bruttoGesamtMonat||0);
+    }else if(Array.isArray(result.monatlich)){
+      invoiceMonth = Number(result.monatlich[month-1]||0);
     }else{
-      console.warn('Rechnungsdaten:',result.error||'API nicht erreichbar');
+      invoiceMonth = 0;
     }
+
+    if(Array.isArray(result.monatlich)){
+      result.monatlich.forEach((v,i)=>{
+        if(i<12) monthlyInvoices[i]=Number(v||0);
+      });
+    }else{
+      monthlyInvoices[month-1]=invoiceMonth;
+    }
+
   }catch(err){
     console.warn('Rechnungsdaten:',err.message);
+    if(dashInvoiceGross) dashInvoiceGross.textContent='—';
+    if(dashInvoiceMonth) dashInvoiceMonth.textContent='—';
+    if(dashProfit) dashProfit.textContent='—';
+    if(dashProfitMonth) dashProfitMonth.textContent='—';
+    return;
   }
 
-  const receiptTotals=window.receiptTotals||{year:{gross:0},month:{gross:0}};
-  const expenseYear=Number(receiptTotals.year?.gross||0);
-  const expenseMonth=Number(receiptTotals.month?.gross||0);
+  const receiptTotals = window.receiptTotals || {year:{gross:0},month:{gross:0}};
+  const expenseYear = Number(receiptTotals.year?.gross||0);
+  const expenseMonth = Number(receiptTotals.month?.gross||0);
+  const profitYear = invoiceYear - expenseYear;
+  const profitMonth = invoiceMonth - expenseMonth;
 
   if(dashInvoiceGross) dashInvoiceGross.textContent=euro(invoiceYear);
   if(dashInvoiceMonth) dashInvoiceMonth.textContent=euro(invoiceMonth);
-  if(dashProfit) dashProfit.textContent=euro(invoiceYear-expenseYear);
-  if(dashProfitMonth) dashProfitMonth.textContent=euro(invoiceMonth-expenseMonth);
+  if(dashProfit) dashProfit.textContent=euro(profitYear);
+  if(dashProfitMonth) dashProfitMonth.textContent=euro(profitMonth);
 
   if(financialMonthlyTable){
     financialMonthlyTable.innerHTML=monthlyInvoices.map((income,i)=>{
-      const expense=Number(window.receiptMonthlyTotals?.[i]||0);
+      const expense=window.receiptMonthlyTotals?.[i]||0;
       const profit=income-expense;
       const name=new Date(year,i,1).toLocaleDateString('de-DE',{month:'long'});
       return `<tr><td>${escapeHtml(name)}</td><td>${euro(income)}</td><td>${euro(expense)}</td><td>${euro(profit)}</td></tr>`;
     }).join('');
   }
 }
-
-function parseFlexibleDate(value){
-  if(!value)return null;
-  if(value instanceof Date && !isNaN(value))return value;
-  const s=String(value).trim();
-  let m=s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
-  if(m)return new Date(Number(m[3]),Number(m[2])-1,Number(m[1]));
-  m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if(m)return new Date(Number(m[1]),Number(m[2])-1,Number(m[3]));
-  const d=new Date(s);
-  return isNaN(d)?null:d;
-}
-function dateYear(value){const d=parseFlexibleDate(value);return d?d.getFullYear():null;}
 
 function showReceiptMsg(message, error=false){
   receiptMsg.textContent=message;
