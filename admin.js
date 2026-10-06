@@ -115,7 +115,7 @@ const financialMonthLabel = document.getElementById('financialMonthLabel');
 const financialMonthlyTable = document.getElementById('financialMonthlyTable');
 const RECHNUNGS_API_URL = 'https://script.google.com/macros/s/AKfycbxJDx4fWqtWjWj056-ZsFJyVPBgB-6uarBsIH0Fmbf30F025o9CmlfhfKXvLU-KLh3Y/exec';
 const ANGEBOTE_API_URL = RECHNUNGS_API_URL;
-const OFFERS_INITIAL_SYNC_KEY = 'ts_serviceleistungen_offers_initial_sync_v5';
+const OFFERS_INITIAL_SYNC_KEY = 'ts_serviceleistungen_offers_initial_sync_v4';
 let currentOffers=[];
 let currentCustomers=[];
 let appointmentDate = new Date();
@@ -1116,51 +1116,28 @@ function normalizeOfferDate(value){
 async function syncOffersToSupabase(rows){
   if(!Array.isArray(rows)||!rows.length)return [];
 
-  // Google Drive kann bei einem manuellen/erneuten Import dieselbe
-  // Angebotsnummer mehrfach liefern. Supabase/Postgres lehnt ein UPSERT
-  // mit demselben Conflict-Key innerhalb eines Statements ab.
-  // Deshalb wird VOR dem UPSERT eindeutig nach Angebotsnummer dedupliziert.
-  const uniqueMap=new Map();
-  let duplicateCount=0;
+  // Vor dem Upsert nach Angebotsnummer deduplizieren.
+  // So kann dieselbe Conflict-Spalte nie zweimal in einem Upsert vorkommen.
+  const uniqueByNumber=new Map();
+  rows.forEach(function(r){
+    const number=String(r.angebotsnummer||r.angebotsnr||'').trim();
+    if(!number)return;
+    uniqueByNumber.set(number,r);
+  });
 
-  for(const r of rows){
-    const number=String(r?.angebotsnummer||r?.angebotsnr||'').trim();
-    if(!number)continue;
+  const uniqueRows=Array.from(uniqueByNumber.values());
+  const numbers=Array.from(uniqueByNumber.keys());
+  if(!numbers.length)return [];
 
-    const normalized={
-      ...r,
-      angebotsnummer:number
-    };
-
-    if(uniqueMap.has(number)){
-      duplicateCount++;
-      const previous=uniqueMap.get(number);
-      // Den Datensatz mit den vollständigeren Angaben behalten.
-      const score=(x)=>[
-        x?.betrag,
-        x?.angebotsdatum||x?.datum||x?.date,
-        x?.kunde||x?.kundenname,
-        x?.firma,
-        x?.beschreibung,
-        x?.dateiId||x?.drive_file_id,
-        x?.dateiUrl||x?.drive_url
-      ].filter(v=>v!==undefined&&v!==null&&String(v).trim()!=='').length;
-      if(score(normalized)>=score(previous))uniqueMap.set(number,normalized);
-    }else{
-      uniqueMap.set(number,normalized);
-    }
-  }
-
-  const cleanRows=[...uniqueMap.values()];
-  if(!cleanRows.length)return [];
-
-  const numbers=cleanRows.map(r=>r.angebotsnummer);
   const {data:saved,error}=await db.from('offers').select('*').in('angebotsnummer',numbers);
   if(error)throw error;
-  const savedMap=new Map((saved||[]).map(x=>[String(x.angebotsnummer||'').trim(),x]));
 
-  const payload=cleanRows.map(r=>{
-    const number=String(r.angebotsnummer||'').trim();
+  const savedMap=new Map((saved||[]).map(function(x){
+    return [String(x.angebotsnummer||'').trim(),x];
+  }));
+
+  const payload=uniqueRows.map(function(r){
+    const number=String(r.angebotsnummer||r.angebotsnr||'').trim();
     const old=savedMap.get(number);
     return {
       angebotsnummer:number,
@@ -1169,19 +1146,19 @@ async function syncOffersToSupabase(rows){
       kundenname:r.kunde||r.kundenname||'',
       beschreibung:r.beschreibung||'',
       betrag:Number(r.betrag||0),
-      status:old?.status||r.status||'Offen / In Bearbeitung',
+      status:old && old.status ? old.status : (r.status||'Offen / In Bearbeitung'),
       dateiname:r.dateiname||'',
       drive_file_id:r.dateiId||r.drive_file_id||'',
       drive_url:r.dateiUrl||r.drive_url||''
     };
   });
 
-  const {error:upsertError}=await db.from('offers').upsert(payload,{onConflict:'angebotsnummer'});
-  if(upsertError)throw upsertError;
+  const {error:upsertError}=await db.from('offers').upsert(
+    payload,
+    {onConflict:'angebotsnummer'}
+  );
 
-  if(duplicateCount){
-    console.info(`Angebote: ${duplicateCount} doppelte Angebotsnummer(n) beim Import bereinigt.`);
-  }
+  if(upsertError)throw upsertError;
   return payload;
 }
 
@@ -1217,13 +1194,13 @@ async function loadOffers(forceRefresh=false){
       const driveRows=Array.isArray(result.angebote)?result.angebote:[];
       if(driveRows.length){
         await syncOffersToSupabase(driveRows);
-        // Kundenübernahme läuft bewusst im Hintergrund und darf den Angebotsimport nicht blockieren.
-        syncOfferCustomers(driveRows).catch(err=>console.warn('Kundenübernahme aus Angeboten:',err.message));
+        await syncOfferCustomers(driveRows);
         const {data:fresh,error:freshError}=await db.from('offers').select('*').order('angebotsdatum',{ascending:false});
         if(freshError)throw freshError;
         rows=Array.isArray(fresh)?fresh.map(x=>({...x,datum:x.angebotsdatum,kunde:x.kundenname,dateiUrl:x.drive_url})):[];
-        // Nur als erfolgreich initialisiert markieren, wenn mindestens ein Angebot importiert wurde.
-        if(!forceRefresh && driveRows.length>0){
+        // Nur als erfolgreich initialisiert markieren, wenn Drive mehr als ein Angebot liefert.
+        // So bleibt ein fehlerhafter/abgebrochener Import beim nächsten Öffnen erneut prüfbar.
+        if(!forceRefresh && driveRows.length>1){
           try{ localStorage.setItem(OFFERS_INITIAL_SYNC_KEY,'1'); }catch(e){}
         }
       }
@@ -1415,7 +1392,7 @@ async function saveOfferStatus(offer, status){
   if(!number)return;
   const payload={
     angebotsnummer:number,
-    angebotsdatum:normalizeOfferDate(offer.angebotsdatum||offer.datum||offer.date),
+    angebotsdatum:offer.angebotsdatum||offer.datum||null,
     firma:offer.firma||'',
     kundenname:offer.kunde||offer.kundenname||'',
     beschreibung:offer.beschreibung||'',
