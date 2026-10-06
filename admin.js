@@ -21,6 +21,26 @@ const requestsView = document.getElementById('requestsView');
 const receiptsView = document.getElementById('receiptsView');
 const invoicesView = document.getElementById('invoicesView');
 const offersView = document.getElementById('offersView');
+const customersView = document.getElementById('customersView');
+const customerList = document.getElementById('customerList');
+const customerSearch = document.getElementById('customerSearch');
+const customerForm = document.getElementById('customerForm');
+const customerMsg = document.getElementById('customerMsg');
+const customerCount = document.getElementById('customerCount');
+const customerId = document.getElementById('customerId');
+const customerNumber = document.getElementById('customerNumber');
+const customerCompany = document.getElementById('customerCompany');
+const customerFirstName = document.getElementById('customerFirstName');
+const customerLastName = document.getElementById('customerLastName');
+const customerStreet = document.getElementById('customerStreet');
+const customerHouseNumber = document.getElementById('customerHouseNumber');
+const customerZip = document.getElementById('customerZip');
+const customerCity = document.getElementById('customerCity');
+const customerPhone = document.getElementById('customerPhone');
+const customerEmail = document.getElementById('customerEmail');
+const customerNotes = document.getElementById('customerNotes');
+const saveCustomerBtn = document.getElementById('saveCustomerBtn');
+const cancelCustomerBtn = document.getElementById('cancelCustomerBtn');
 const offerList = document.getElementById('offerList');
 const offerSearch = document.getElementById('offerSearch');
 const offerStatusFilter = document.getElementById('offerStatusFilter');
@@ -95,6 +115,7 @@ const financialMonthlyTable = document.getElementById('financialMonthlyTable');
 const RECHNUNGS_API_URL = 'https://script.google.com/macros/s/AKfycbxJDx4fWqtWjWj056-ZsFJyVPBgB-6uarBsIH0Fmbf30F025o9CmlfhfKXvLU-KLh3Y/exec';
 const ANGEBOTE_API_URL = RECHNUNGS_API_URL;
 let currentOffers=[];
+let currentCustomers=[];
 let appointmentDate = new Date();
 let appointmentView = 'day';
 let calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -961,8 +982,7 @@ async function loadOffers(){
     if(!response.ok||result.ok===false)throw new Error(result.error||'Angebotsdaten konnten nicht geladen werden.');
     let rows=Array.isArray(result.angebote)?result.angebote:[];
 
-    // Persistierte Statuswerte aus der Supabase-Tabelle übernehmen.
-    // Die PDF-Auslesung bleibt dabei unverändert die Quelle für Angebotsdaten.
+    // Bereits gespeicherte Statuswerte aus Supabase übernehmen.
     try{
       const numbers=rows.map(r=>String(r.angebotsnummer||r.angebotsnr||'').trim()).filter(Boolean);
       if(numbers.length){
@@ -971,12 +991,20 @@ async function loadOffers(){
           const byNumber=new Map(data.map(x=>[String(x.angebotsnummer||'').trim(),x]));
           rows=rows.map(r=>{
             const saved=byNumber.get(String(r.angebotsnummer||'').trim());
-            return saved?{...r,status:saved.status||r.status}:r;
+            return saved?{...r,status:saved.status||r.status,customer_id:saved.customer_id||null}:r;
           });
         }
       }
     }catch(statusErr){
       console.warn('Angebotsstatus aus Supabase konnte nicht geladen werden:',statusErr.message);
+    }
+
+    // Kundendaten aus den PDFs automatisch in das Kundenstammsystem übernehmen.
+    // Fehler hierbei blockieren die Angebotsanzeige nicht.
+    try{
+      await syncOfferCustomers(rows);
+    }catch(customerSyncError){
+      console.warn('Kundenübernahme aus Angeboten:',customerSyncError.message);
     }
 
     currentOffers=rows;
@@ -986,6 +1014,194 @@ async function loadOffers(){
     offerList.innerHTML=`<p class="notice">Angebotsdaten konnten nicht geladen werden: ${escapeHtml(err.message)}</p>`;
     updateOfferTotals([]);
   }
+}
+
+async function syncOfferCustomers(rows){
+  if(!Array.isArray(rows)||!rows.length)return;
+  for(const offer of rows){
+    const k=offer?.kundendaten||{};
+    const number=String(k.kundennummer||'').trim();
+    const email=String(k.email||'').trim();
+    const firma=String(k.firma||'').trim();
+    const vorname=String(k.vorname||'').trim();
+    const nachname=String(k.nachname||'').trim();
+    if(!number && !email && !firma && !vorname && !nachname)continue;
+
+    const payload={
+      kundennummer:number||null,
+      firma:firma||null,
+      vorname:vorname||null,
+      nachname:nachname||null,
+      strasse:String(k.strasse||'').trim()||null,
+      hausnummer:String(k.hausnummer||'').trim()||null,
+      plz:String(k.plz||'').trim()||null,
+      ort:String(k.ort||'').trim()||null,
+      land:String(k.land||'Deutschland').trim()||'Deutschland',
+      telefon:String(k.telefon||'').trim()||null,
+      email:email||null,
+      updated_at:new Date().toISOString()
+    };
+
+    let existing=null;
+    if(number){
+      const r=await db.from('customers').select('id').eq('kundennummer',number).limit(1).maybeSingle();
+      if(r.error)throw r.error;
+      existing=r.data;
+    }
+    if(!existing && email){
+      const r=await db.from('customers').select('id').ilike('email',email).limit(1).maybeSingle();
+      if(r.error)throw r.error;
+      existing=r.data;
+    }
+    if(!existing && firma && (vorname||nachname)){
+      const r=await db.from('customers').select('id').eq('firma',firma).eq('vorname',vorname||null).eq('nachname',nachname||null).limit(1).maybeSingle();
+      if(r.error)throw r.error;
+      existing=r.data;
+    }
+
+    let customerId=null;
+    if(existing?.id){
+      const r=await db.from('customers').update(payload).eq('id',existing.id).select('id').maybeSingle();
+      if(r.error)throw r.error;
+      customerId=r.data?.id||existing.id;
+    }else{
+      const r=await db.from('customers').insert(payload).select('id').maybeSingle();
+      if(r.error)throw r.error;
+      customerId=r.data?.id||null;
+    }
+
+    offer.customer_id=customerId;
+  }
+}
+
+
+function showCustomerMsg(message,isError=false){
+  if(!customerMsg)return;
+  customerMsg.textContent=message;
+  customerMsg.classList.toggle('hidden',!message);
+  customerMsg.classList.toggle('notice-error',isError);
+}
+
+function resetCustomerForm(){
+  customerForm?.reset();
+  if(customerId)customerId.value='';
+  if(customerCompany)customerCompany.value='';
+  if(customerFirstName)customerFirstName.value='';
+  if(customerLastName)customerLastName.value='';
+  if(customerStreet)customerStreet.value='';
+  if(customerHouseNumber)customerHouseNumber.value='';
+  if(customerZip)customerZip.value='';
+  if(customerCity)customerCity.value='';
+  if(customerPhone)customerPhone.value='';
+  if(customerEmail)customerEmail.value='';
+  if(customerNotes)customerNotes.value='';
+  if(saveCustomerBtn)saveCustomerBtn.textContent='Kunde speichern';
+  showCustomerMsg('');
+}
+
+function renderCustomers(){
+  if(!customerList)return;
+  const q=(customerSearch?.value||'').trim().toLowerCase();
+  const rows=currentCustomers.filter(c=>[
+    c.kundennummer,c.firma,c.vorname,c.nachname,c.strasse,c.hausnummer,c.plz,c.ort,c.telefon,c.email
+  ].join(' ').toLowerCase().includes(q));
+  if(customerCount)customerCount.textContent=String(currentCustomers.length);
+  if(!rows.length){
+    customerList.innerHTML='<div class="empty-box">Keine Kunden gefunden.</div>';
+    return;
+  }
+  customerList.innerHTML=rows.map(c=>{
+    const name=[c.vorname,c.nachname].filter(Boolean).join(' ');
+    const title=c.firma||name||'Ohne Namen';
+    const address=[c.strasse,c.hausnummer].filter(Boolean).join(' ');
+    const city=[c.plz,c.ort].filter(Boolean).join(' ');
+    return `<div class="customer-card" style="padding:16px;border:1px solid #e6dfcf;border-radius:16px;margin:10px 0;background:#fff">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
+        <div><b>${escapeHtml(title)}</b><div style="margin-top:4px;color:#777">${escapeHtml(name&&c.firma?name+' · ':'')}${escapeHtml(c.kundennummer||'')}</div>
+        <div style="margin-top:8px;color:#555">${escapeHtml(address||'')}${address&&city?' · ':''}${escapeHtml(city||'')}</div>
+        <div style="margin-top:4px;color:#555">${escapeHtml(c.telefon||'')}${c.telefon&&c.email?' · ':''}${escapeHtml(c.email||'')}</div></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="small-btn" data-customer-edit="${escapeHtml(c.id)}">Bearbeiten</button><button type="button" class="small-btn" data-customer-delete="${escapeHtml(c.id)}">Löschen</button></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function loadCustomers(){
+  if(!customerList)return;
+  customerList.innerHTML='<p>Kunden werden geladen...</p>';
+  const {data,error}=await db.from('customers').select('*').order('nachname',{ascending:true}).order('firma',{ascending:true});
+  if(error){
+    currentCustomers=[];
+    if(customerCount)customerCount.textContent='0';
+    customerList.innerHTML=`<p class="notice">Kunden konnten nicht geladen werden: ${escapeHtml(error.message)}</p>`;
+    return;
+  }
+  currentCustomers=data||[];
+  renderCustomers();
+}
+
+function editCustomer(id){
+  const c=currentCustomers.find(x=>x.id===id);
+  if(!c)return;
+  customerId.value=c.id||'';
+  customerNumber.value=c.kundennummer||'';
+  customerCompany.value=c.firma||'';
+  customerFirstName.value=c.vorname||'';
+  customerLastName.value=c.nachname||'';
+  customerStreet.value=c.strasse||'';
+  customerHouseNumber.value=c.hausnummer||'';
+  customerZip.value=c.plz||'';
+  customerCity.value=c.ort||'';
+  customerPhone.value=c.telefon||'';
+  customerEmail.value=c.email||'';
+  customerNotes.value=c.notizen||'';
+  saveCustomerBtn.textContent='Änderungen speichern';
+  showCustomerMsg('');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+async function saveCustomer(e){
+  e.preventDefault();
+  if(saveCustomerBtn)saveCustomerBtn.disabled=true;
+  showCustomerMsg('');
+  try{
+    const payload={
+      kundennummer:customerNumber.value.trim()||null,
+      firma:customerCompany.value.trim()||null,
+      vorname:customerFirstName.value.trim()||null,
+      nachname:customerLastName.value.trim()||null,
+      strasse:customerStreet.value.trim()||null,
+      hausnummer:customerHouseNumber.value.trim()||null,
+      plz:customerZip.value.trim()||null,
+      ort:customerCity.value.trim()||null,
+      land:'Deutschland',
+      telefon:customerPhone.value.trim()||null,
+      email:customerEmail.value.trim()||null,
+      notizen:customerNotes.value.trim()||null,
+      updated_at:new Date().toISOString()
+    };
+    const id=customerId.value.trim();
+    const result=id?await db.from('customers').update(payload).eq('id',id):await db.from('customers').insert(payload);
+    if(result.error)throw result.error;
+    resetCustomerForm();
+    await loadCustomers();
+    showCustomerMsg('Kunde erfolgreich gespeichert.');
+  }catch(err){
+    showCustomerMsg('Kunde konnte nicht gespeichert werden: '+err.message,true);
+  }finally{
+    if(saveCustomerBtn)saveCustomerBtn.disabled=false;
+  }
+}
+
+async function deleteCustomer(id){
+  const c=currentCustomers.find(x=>x.id===id);
+  if(!c)return;
+  const title=c.firma||[c.vorname,c.nachname].filter(Boolean).join(' ')||'diesen Kunden';
+  if(!confirm(`„${title}“ wirklich löschen?`))return;
+  const {error}=await db.from('customers').delete().eq('id',id);
+  if(error){alert('Kunde konnte nicht gelöscht werden: '+error.message);return;}
+  if(customerId.value===id)resetCustomerForm();
+  await loadCustomers();
 }
 
 function offerStatusClass(status){
@@ -1031,11 +1247,15 @@ function renderOffers(){
 async function saveOfferStatus(offer, status){
   const number=String(offer.angebotsnummer||offer.angebotsnr||'').trim();
   if(!number)return;
+  const {data:{session}}=await db.auth.getSession();
+  if(!session)throw new Error('Admin-Sitzung ist abgelaufen. Bitte erneut anmelden.');
+
   const payload={
     angebotsnummer:number,
     angebotsdatum:offer.angebotsdatum||offer.datum||null,
-    firma:offer.firma||'',
-    kundenname:offer.kunde||offer.kundenname||'',
+    firma:offer.firma||offer.kundendaten?.firma||'',
+    kundenname:offer.kunde||offer.kundenname||([offer.kundendaten?.vorname,offer.kundendaten?.nachname].filter(Boolean).join(' '))||offer.kundendaten?.firma||'',
+    customer_id:offer.customer_id||null,
     beschreibung:offer.beschreibung||'',
     betrag:Number(offer.betrag||0),
     status,
@@ -1043,9 +1263,21 @@ async function saveOfferStatus(offer, status){
     drive_file_id:offer.dateiId||offer.drive_file_id||'',
     drive_url:offer.dateiUrl||offer.drive_url||''
   };
-  const {error}=await db.from('offers').upsert(payload,{onConflict:'angebotsnummer'});
-  if(error)throw error;
+
+  // Erst vorhandenen Datensatz suchen. Dadurch vermeiden wir die komplizierte
+  // RLS-Upsert-Situation und brauchen kein RETURNING auf einen neuen Datensatz.
+  const existing=await db.from('offers').select('id').eq('angebotsnummer',number).limit(1).maybeSingle();
+  if(existing.error)throw existing.error;
+
+  if(existing.data?.id){
+    const result=await db.from('offers').update(payload).eq('id',existing.data.id);
+    if(result.error)throw result.error;
+  }else{
+    const result=await db.from('offers').insert(payload);
+    if(result.error)throw result.error;
+  }
 }
+
 
 async function handleOfferStatusChange(select){
   const number=select.dataset.offerNumber;
@@ -1073,6 +1305,7 @@ function showView(view){
   receiptsView.classList.toggle('hidden',view!=='receipts');
   if(invoicesView)invoicesView.classList.toggle('hidden',view!=='invoices');
   if(offersView)offersView.classList.toggle('hidden',view!=='offers');
+  if(customersView)customersView.classList.toggle('hidden',view!=='customers');
   document.querySelectorAll('[data-back-dashboard]').forEach(btn=>btn.classList.toggle('hidden',view==='dashboard'));
 
   if(pageTitle && view==='dashboard')pageTitle.textContent='Dashboard';
@@ -1080,6 +1313,7 @@ function showView(view){
   if(pageTitle && view==='receipts')pageTitle.textContent='Belege';
   if(pageTitle && view==='invoices')pageTitle.textContent='Rechnungen';
   if(pageTitle && view==='offers')pageTitle.textContent='Angebote';
+  if(pageTitle && view==='customers')pageTitle.textContent='Kunden & Firmen';
 
   if(view==='requests')load();
   if(view==='receipts'){
@@ -1088,6 +1322,7 @@ function showView(view){
   }
   if(view==='invoices')loadInvoices();
   if(view==='offers')loadOffers();
+  if(view==='customers')loadCustomers();
 }
 
 document.querySelectorAll('[data-nav]').forEach(btn=>{
@@ -1105,6 +1340,16 @@ offerStatusFilter?.addEventListener('change',renderOffers);
 offerList?.addEventListener('change',e=>{
   const select=e.target.closest('[data-offer-number]');
   if(select)handleOfferStatusChange(select);
+});
+
+customerSearch?.addEventListener('input',renderCustomers);
+customerForm?.addEventListener('submit',saveCustomer);
+cancelCustomerBtn?.addEventListener('click',resetCustomerForm);
+customerList?.addEventListener('click',e=>{
+  const edit=e.target.closest('[data-customer-edit]');
+  if(edit)return editCustomer(edit.dataset.customerEdit);
+  const del=e.target.closest('[data-customer-delete]');
+  if(del)return deleteCustomer(del.dataset.customerDelete);
 });
 
 receiptImage?.addEventListener('change',()=>{
@@ -1175,4 +1420,4 @@ nextMonthBtn?.addEventListener('click',()=>{
 loginForm.addEventListener('submit',async e=>{e.preventDefault();loginMsg.classList.add('hidden');const {error}=await db.auth.signInWithPassword({email:emailEl.value.trim(),password:passwordEl.value});if(error){showLoginMessage(error.message);return}await init()});
 listEl.addEventListener('click',async e=>{const button=e.target.closest('button[data-action]');if(!button)return;const id=button.dataset.id;const action=button.dataset.action;if(action==='details')return openDetails(id);if(action==='confirm')return confirmRequest(id);if(action==='reject')return rejectRequest(id);if(action==='alternative')return alternativeRequest(id);if(action==='delete')return deleteRequest(id)});
 detailActions.addEventListener('click',async e=>{const button=e.target.closest('button[data-modal-action]');if(!button||!selectedRequest)return;const action=button.dataset.modalAction;if(action==='confirm')await confirmRequest(selectedRequest.id);if(action==='reject')await rejectRequest(selectedRequest.id);if(action==='alternative')await alternativeRequest(selectedRequest.id);if(action==='delete')await deleteRequest(selectedRequest.id)});
-closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',async()=>{refreshBtn.disabled=true;try{await load();await loadReceipts();await loadFinancials();await loadInvoices();await loadOffers();}finally{refreshBtn.disabled=false;}});init();
+closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',async()=>{refreshBtn.disabled=true;try{await load();await loadReceipts();await loadFinancials();await loadInvoices();await loadOffers();await loadCustomers();}finally{refreshBtn.disabled=false;}});init();
