@@ -953,50 +953,65 @@ async function deleteReceipt(id){
 }
 
 
-function normalizeCustomerKey(value){
-  return String(value||'').trim().toLowerCase().replace(/\s+/g,' ');
+function normalizeCustomerText(value){
+  return String(value??'').toLowerCase().trim().replace(/\s+/g,' ').replace(/[.,;:()\[\]{}]/g,'');
 }
-function parseInvoiceCustomer(value){
-  const name=String(value||'').trim().replace(/\s+/g,' ');
-  if(!name)return {firma:'',vorname:'',nachname:''};
-  if(/\b(gmbh|ug|ag|ohg|kg|gbr|e\.k\.|e\.v\.|brandschutz|immobilien|service|technik|bau|autohaus)\b/i.test(name)){
-    return {firma:name,vorname:'',nachname:''};
-  }
-  const parts=name.split(' ');
-  if(parts.length===1)return {firma:name,vorname:'',nachname:''};
-  return {firma:'',vorname:parts.shift(),nachname:parts.join(' ')};
+
+function invoiceCustomerParts(value){
+  const raw=String(value??'').trim();
+  if(!raw)return {firma:'',vorname:'',nachname:''};
+  const business=/\b(gmbh|ug|ag|kg|ohg|gbr|e\.k\.|e\.v\.|brandschutz|service|leistungen|fahrzeug|autohaus|autoteile|werkstatt|immobilien|verwaltung|handel|technik|solutions|logistik|bau|bauunternehmen|versicherung|hotel|gastronomie)\b/i.test(raw);
+  const parts=raw.split(/\s+/).filter(Boolean);
+  if(!business && parts.length===2)return {firma:'',vorname:parts[0],nachname:parts[1]};
+  return {firma:raw,vorname:'',nachname:''};
 }
+
 async function syncInvoiceCustomers(rows){
   if(!Array.isArray(rows)||!rows.length)return;
-  const names=[...new Set(rows.map(r=>String(r.kunde||'').trim()).filter(Boolean))];
-  if(!names.length)return;
-  const {data:customers,error}=await db.from('customers').select('*');
-  if(error)throw error;
-  const existing=customers||[];
-  const byName=new Map();
-  for(const c of existing){
-    const full=normalizeCustomerKey([c.vorname,c.nachname].filter(Boolean).join(' '));
-    const company=normalizeCustomerKey(c.firma);
-    if(full)byName.set(full,c);
-    if(company)byName.set(company,c);
-  }
-  const inserts=[];
-  for(const rawName of names){
-    const key=normalizeCustomerKey(rawName);
-    if(byName.has(key))continue;
-    const parsed=parseInvoiceCustomer(rawName);
-    inserts.push({
-      kundennummer:null,
-      firma:parsed.firma||null,
-      vorname:parsed.vorname||null,
-      nachname:parsed.nachname||null,
-      land:'Deutschland',
-      notizen:'Automatisch aus Rechnung übernommen'
-    });
-  }
-  if(inserts.length){
-    const r=await db.from('customers').insert(inserts);
-    if(r.error)throw r.error;
+  try{
+    const {data:existing,error}=await db.from('customers').select('*');
+    if(error)throw error;
+    const customers=Array.isArray(existing)?existing:[];
+    let changed=false;
+    for(const invoice of rows){
+      const invoiceName=String(invoice.kunde||'').trim();
+      if(!invoiceName || invoiceName==='—')continue;
+      const norm=normalizeCustomerText(invoiceName);
+      const parts=invoiceCustomerParts(invoiceName);
+      const fullName=normalizeCustomerText([parts.vorname,parts.nachname].filter(Boolean).join(' '));
+      let match=customers.find(c=>{
+        const company=normalizeCustomerText(c.firma);
+        const name=normalizeCustomerText([c.vorname,c.nachname].filter(Boolean).join(' '));
+        return company===norm || name===norm || (fullName && name===fullName);
+      });
+      if(match){
+        const patch={updated_at:new Date().toISOString()};
+        if(!match.firma && parts.firma)patch.firma=parts.firma;
+        if(!match.vorname && parts.vorname)patch.vorname=parts.vorname;
+        if(!match.nachname && parts.nachname)patch.nachname=parts.nachname;
+        if(Object.keys(patch).length>1){
+          const {error:updateError}=await db.from('customers').update(patch).eq('id',match.id);
+          if(updateError)console.warn('Rechnungskunde konnte nicht ergänzt werden:',updateError.message);
+          else Object.assign(match,patch);
+        }
+      }else{
+        const payload={
+          kundennummer:null,
+          firma:parts.firma||null,
+          vorname:parts.vorname||null,
+          nachname:parts.nachname||null,
+          strasse:null,hausnummer:null,plz:null,ort:null,land:'Deutschland',
+          telefon:null,email:null,notizen:'Automatisch aus Rechnung übernommen.',
+          updated_at:new Date().toISOString()
+        };
+        const {data:newCustomer,error:insertError}=await db.from('customers').insert(payload).select().single();
+        if(insertError)console.warn('Rechnungskunde konnte nicht angelegt werden:',insertError.message);
+        else if(newCustomer){customers.push(newCustomer);changed=true;}
+      }
+    }
+    if(changed && customersView && !customersView.classList.contains('hidden'))renderCustomers();
+  }catch(err){
+    console.warn('Kundenübernahme aus Rechnungen fehlgeschlagen:',err.message);
   }
 }
 
@@ -1012,14 +1027,12 @@ async function loadInvoices(){
     const month=Number(result.bruttoGesamtMonat??0);
     if(invoiceTotal)invoiceTotal.textContent=euro(year);
     if(invoiceMonthTotal)invoiceMonthTotal.textContent=euro(month);
+    if(!rows.length){invoiceList.innerHTML='<div class="empty-box">Die Rechnungs-API liefert aktuell nur Summen. Sobald die erweiterte <b>doGet()</b>-Version eingespielt ist, erscheinen hier wieder alle Rechnungen.</div>';return;}
 
-    // Kundenübernahme darf die Anzeige der Rechnungen nicht blockieren.
-    syncInvoiceCustomers(rows).catch(err=>console.warn('Rechnungskunden konnten nicht synchronisiert werden:',err.message));
+    // Rechnungen speisen zusätzlich den gemeinsamen Kundenstamm.
+    // Die eigentliche Rechnungsberechnung oben bleibt unverändert.
+    await syncInvoiceCustomers(rows);
 
-    if(!rows.length){
-      invoiceList.innerHTML='<div class="empty-box">Die Rechnungs-API liefert aktuell nur Summen. Sobald die erweiterte <b>doGet()</b>-Version eingespielt ist, erscheinen hier wieder alle Rechnungen.</div>';
-      return;
-    }
     const q=(invoiceSearch?.value||'').trim().toLowerCase();
     const filtered=rows.filter(r=>[r.rechnungsnummer,r.kunde,r.beschreibung,r.rechnungsdatum].join(' ').toLowerCase().includes(q));
     invoiceList.innerHTML=filtered.length?`<div class="invoice-table"><div class="invoice-row invoice-head"><span>Datum</span><span>Rechnungsnr.</span><span>Kunde</span><span>Beschreibung</span><span>Brutto</span><span>Quelle</span></div>${filtered.map(r=>`<div class="invoice-row"><span>${escapeHtml(r.rechnungsdatum||'—')}</span><span><b>${escapeHtml(r.rechnungsnummer||'—')}</b></span><span>${escapeHtml(r.kunde||'—')}</span><span>${escapeHtml(r.beschreibung||'—')}</span><span><b>${euro(r.bruttobetrag||0)}</b></span><span>${r.quelldatei?`<a href="${escapeHtml(r.quelldatei)}" target="_blank" rel="noopener">PDF</a>`:'—'}</span></div>`).join('')}</div>`:'<div class="empty-box">Keine passende Rechnung gefunden.</div>';
@@ -1027,46 +1040,81 @@ async function loadInvoices(){
 }
 
 
-function offerCacheKey(){return 'ts_serviceleistungen_offers_cache_v3';}
-function readOfferCache(){
+async function syncOfferCustomers(rows){
+  if(!Array.isArray(rows)||!rows.length)return;
   try{
-    const raw=localStorage.getItem(offerCacheKey());
-    if(!raw)return null;
-    const parsed=JSON.parse(raw);
-    return Array.isArray(parsed?.rows)?parsed:null;
-  }catch(err){return null;}
-}
-function writeOfferCache(rows){
-  try{localStorage.setItem(offerCacheKey(),JSON.stringify({savedAt:Date.now(),rows}));}catch(err){}
-}
-
-async function loadOffers(forceFresh=false){
-  if(!offerList)return;
-  const cached=readOfferCache();
-  const age=cached?Date.now()-Number(cached.savedAt||0):Infinity;
-  const valid=Number.isFinite(age)&&age<15*60*1000;
-
-  if(!forceFresh&&valid&&cached.rows.length){
-    currentOffers=cached.rows;
-    renderOffers();
-    offerList.insertAdjacentHTML('afterbegin','<div class="notice">Gespeicherte Angebote werden angezeigt – Aktualisierung läuft im Hintergrund…</div>');
-    loadOffers(true).catch(err=>console.warn('Hintergrund-Aktualisierung Angebote:',err.message));
-    return;
+    const {data:existing,error}=await db.from('customers').select('*');
+    if(error)throw error;
+    const customers=Array.isArray(existing)?existing:[];
+    for(const offer of rows){
+      const k=offer.kundendaten||{};
+      const number=String(k.kundennummer||'').trim();
+      const email=String(k.email||'').trim().toLowerCase();
+      const company=String(k.firma||'').trim();
+      const first=String(k.vorname||'').trim();
+      const last=String(k.nachname||'').trim();
+      const name=normalizeCustomerText([first,last].filter(Boolean).join(' '));
+      if(!number&&!email&&!company&&!name)continue;
+      let match=customers.find(c=>number&&String(c.kundennummer||'').trim()===number);
+      if(!match&&email)match=customers.find(c=>String(c.email||'').trim().toLowerCase()===email);
+      if(!match)match=customers.find(c=>{
+        const cName=normalizeCustomerText([c.vorname,c.nachname].filter(Boolean).join(' '));
+        return company && normalizeCustomerText(c.firma)===normalizeCustomerText(company) || (name && cName===name);
+      });
+      const payload={
+        kundennummer:number||null,firma:company||null,vorname:first||null,nachname:last||null,
+        strasse:String(k.strasse||'').trim()||null,hausnummer:String(k.hausnummer||'').trim()||null,
+        plz:String(k.plz||'').trim()||null,ort:String(k.ort||'').trim()||null,land:String(k.land||'Deutschland').trim()||'Deutschland',
+        telefon:String(k.telefon||'').trim()||null,email:String(k.email||'').trim()||null,updated_at:new Date().toISOString()
+      };
+      if(match){
+        const patch={updated_at:payload.updated_at};
+        for(const key of ['kundennummer','firma','vorname','nachname','strasse','hausnummer','plz','ort','land','telefon','email']){
+          if(!match[key] && payload[key])patch[key]=payload[key];
+        }
+        if(Object.keys(patch).length>1){
+          const {error:updateError}=await db.from('customers').update(patch).eq('id',match.id);
+          if(updateError)console.warn('Angebotskunde konnte nicht ergänzt werden:',updateError.message);
+          else Object.assign(match,patch);
+        }
+      }else{
+        const {data:newCustomer,error:insertError}=await db.from('customers').insert(payload).select().single();
+        if(insertError)console.warn('Angebotskunde konnte nicht angelegt werden:',insertError.message);
+        else if(newCustomer){customers.push(newCustomer);match=newCustomer;}
+      }
+      if(match){
+        offer.customer_id=match.id;
+        const offerNumber=String(offer.angebotsnummer||offer.angebotsnr||'').trim();
+        if(offerNumber){
+          const {data:savedOffer}=await db.from('offers').select('id').eq('angebotsnummer',offerNumber).maybeSingle();
+          if(savedOffer?.id){
+            const {error:updateOfferError}=await db.from('offers').update({customer_id:match.id}).eq('id',savedOffer.id);
+            if(updateOfferError)console.warn('Angebot konnte nicht mit Kunde verknüpft werden:',updateOfferError.message);
+          }
+        }
+      }
+    }
+  }catch(err){
+    console.warn('Kundenübernahme aus Angeboten fehlgeschlagen:',err.message);
   }
+}
 
-  if(!cached?.rows?.length)offerList.innerHTML='<p>Angebote werden geladen...</p>';
-
+async function loadOffers(){
+  if(!offerList)return;
+  offerList.innerHTML='<p>Angebote werden geladen...</p>';
   try{
     const response=await fetch(`${ANGEBOTE_API_URL}?action=angebote&v=${Date.now()}`,{cache:'no-store'});
     const result=await response.json().catch(()=>({}));
     if(!response.ok||result.ok===false)throw new Error(result.error||'Angebotsdaten konnten nicht geladen werden.');
     let rows=Array.isArray(result.angebote)?result.angebote:[];
 
+    // Persistierte Statuswerte aus der Supabase-Tabelle übernehmen.
+    // Die PDF-Auslesung bleibt dabei unverändert die Quelle für Angebotsdaten.
     try{
       const numbers=rows.map(r=>String(r.angebotsnummer||r.angebotsnr||'').trim()).filter(Boolean);
       if(numbers.length){
         const {data,error}=await db.from('offers').select('*').in('angebotsnummer',numbers);
-        if(!error&&Array.isArray(data)){
+        if(!error && Array.isArray(data)){
           const byNumber=new Map(data.map(x=>[String(x.angebotsnummer||'').trim(),x]));
           rows=rows.map(r=>{
             const saved=byNumber.get(String(r.angebotsnummer||'').trim());
@@ -1074,26 +1122,21 @@ async function loadOffers(forceFresh=false){
           });
         }
       }
-    }catch(err){console.warn('Angebotsstatus aus Supabase konnte nicht geladen werden:',err.message);}
+    }catch(statusErr){
+      console.warn('Angebotsstatus aus Supabase konnte nicht geladen werden:',statusErr.message);
+    }
 
-    try{await syncOfferCustomers(rows);}
-    catch(err){console.warn('Angebotskunden konnten nicht synchronisiert werden:',err.message);}
-
+    // Kunden aus den ausgelesenen Angebots-PDFs automatisch in den Kundenstamm übernehmen.
+    await syncOfferCustomers(rows);
     currentOffers=rows;
-    writeOfferCache(rows);
     renderOffers();
   }catch(err){
-    if(cached?.rows?.length){
-      currentOffers=cached.rows;
-      renderOffers();
-      offerList.insertAdjacentHTML('afterbegin','<div class="notice">Aktualisierung fehlgeschlagen – letzter gespeicherter Stand wird angezeigt.</div>');
-      return;
-    }
     currentOffers=[];
     offerList.innerHTML=`<p class="notice">Angebotsdaten konnten nicht geladen werden: ${escapeHtml(err.message)}</p>`;
     updateOfferTotals([]);
   }
 }
+
 
 function showCustomerMsg(message,isError=false){
   if(!customerMsg)return;
@@ -1267,15 +1310,11 @@ function renderOffers(){
 async function saveOfferStatus(offer, status){
   const number=String(offer.angebotsnummer||offer.angebotsnr||'').trim();
   if(!number)return;
-  const {data:{session}}=await db.auth.getSession();
-  if(!session)throw new Error('Admin-Sitzung ist abgelaufen. Bitte erneut anmelden.');
-
   const payload={
     angebotsnummer:number,
     angebotsdatum:offer.angebotsdatum||offer.datum||null,
-    firma:offer.firma||offer.kundendaten?.firma||'',
-    kundenname:offer.kunde||offer.kundenname||([offer.kundendaten?.vorname,offer.kundendaten?.nachname].filter(Boolean).join(' '))||offer.kundendaten?.firma||'',
-    customer_id:offer.customer_id||null,
+    firma:offer.firma||'',
+    kundenname:offer.kunde||offer.kundenname||'',
     beschreibung:offer.beschreibung||'',
     betrag:Number(offer.betrag||0),
     status,
@@ -1283,21 +1322,9 @@ async function saveOfferStatus(offer, status){
     drive_file_id:offer.dateiId||offer.drive_file_id||'',
     drive_url:offer.dateiUrl||offer.drive_url||''
   };
-
-  // Erst vorhandenen Datensatz suchen. Dadurch vermeiden wir die komplizierte
-  // RLS-Upsert-Situation und brauchen kein RETURNING auf einen neuen Datensatz.
-  const existing=await db.from('offers').select('id').eq('angebotsnummer',number).limit(1).maybeSingle();
-  if(existing.error)throw existing.error;
-
-  if(existing.data?.id){
-    const result=await db.from('offers').update(payload).eq('id',existing.data.id);
-    if(result.error)throw result.error;
-  }else{
-    const result=await db.from('offers').insert(payload);
-    if(result.error)throw result.error;
-  }
+  const {error}=await db.from('offers').upsert(payload,{onConflict:'angebotsnummer'});
+  if(error)throw error;
 }
-
 
 async function handleOfferStatusChange(select){
   const number=select.dataset.offerNumber;
@@ -1310,7 +1337,6 @@ async function handleOfferStatusChange(select){
   try{
     await saveOfferStatus(offer,newStatus);
     offer.status=newStatus;
-    writeOfferCache(currentOffers);
     renderOffers();
   }catch(err){
     select.value=oldStatus;
@@ -1441,4 +1467,4 @@ nextMonthBtn?.addEventListener('click',()=>{
 loginForm.addEventListener('submit',async e=>{e.preventDefault();loginMsg.classList.add('hidden');const {error}=await db.auth.signInWithPassword({email:emailEl.value.trim(),password:passwordEl.value});if(error){showLoginMessage(error.message);return}await init()});
 listEl.addEventListener('click',async e=>{const button=e.target.closest('button[data-action]');if(!button)return;const id=button.dataset.id;const action=button.dataset.action;if(action==='details')return openDetails(id);if(action==='confirm')return confirmRequest(id);if(action==='reject')return rejectRequest(id);if(action==='alternative')return alternativeRequest(id);if(action==='delete')return deleteRequest(id)});
 detailActions.addEventListener('click',async e=>{const button=e.target.closest('button[data-modal-action]');if(!button||!selectedRequest)return;const action=button.dataset.modalAction;if(action==='confirm')await confirmRequest(selectedRequest.id);if(action==='reject')await rejectRequest(selectedRequest.id);if(action==='alternative')await alternativeRequest(selectedRequest.id);if(action==='delete')await deleteRequest(selectedRequest.id)});
-closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',async()=>{refreshBtn.disabled=true;try{await load();await loadReceipts();await loadFinancials();await loadInvoices();await loadOffers(true);await loadCustomers();}finally{refreshBtn.disabled=false;}});init();
+closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',async()=>{refreshBtn.disabled=true;try{await load();await loadReceipts();await loadFinancials();await loadInvoices();await loadOffers();await loadCustomers();}finally{refreshBtn.disabled=false;}});init();
