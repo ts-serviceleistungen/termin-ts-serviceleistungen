@@ -1151,7 +1151,17 @@ async function syncOffersToSupabase(rows){
   const {data:saved,error}=await db.from('offers').select('*').in('angebotsnummer',numbers);
   if(error)throw error;
   const savedMap=new Map((saved||[]).map(x=>[String(x.angebotsnummer||'').trim(),x]));
-  const payload=rows.map(r=>{
+  // Google Drive kann bei einem Import dieselbe Angebotsnummer mehrfach liefern.
+  // Supabase darf aber innerhalb eines einzigen upsert()-Aufrufs denselben
+  // Konfliktschlüssel nicht zweimal verarbeiten. Deshalb wird VOR dem Schreiben
+  // eindeutig nach Angebotsnummer zusammengeführt.
+  const uniqueRows=new Map();
+  rows.forEach(r=>{
+    const number=String(r.angebotsnummer||r.angebotsnr||'').trim();
+    if(number) uniqueRows.set(number,r);
+  });
+
+  const payload=Array.from(uniqueRows.values()).map(r=>{
     const number=String(r.angebotsnummer||r.angebotsnr||'').trim();
     const old=savedMap.get(number);
     return {
@@ -1167,6 +1177,7 @@ async function syncOffersToSupabase(rows){
       drive_url:r.dateiUrl||r.drive_url||''
     };
   });
+
   const {error:upsertError}=await db.from('offers').upsert(payload,{onConflict:'angebotsnummer'});
   if(upsertError)throw upsertError;
   return payload;
