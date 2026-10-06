@@ -115,6 +115,7 @@ const financialMonthLabel = document.getElementById('financialMonthLabel');
 const financialMonthlyTable = document.getElementById('financialMonthlyTable');
 const RECHNUNGS_API_URL = 'https://script.google.com/macros/s/AKfycbxJDx4fWqtWjWj056-ZsFJyVPBgB-6uarBsIH0Fmbf30F025o9CmlfhfKXvLU-KLh3Y/exec';
 const ANGEBOTE_API_URL = RECHNUNGS_API_URL;
+const OFFERS_INITIAL_SYNC_KEY = 'ts_serviceleistungen_offers_initial_sync_v2';
 let currentOffers=[];
 let currentCustomers=[];
 let appointmentDate = new Date();
@@ -1145,8 +1146,13 @@ async function loadOffers(forceRefresh=false){
       dateiUrl:x.drive_url
     })):[];
 
-    // Nur beim manuellen Aktualisieren (oder beim allerersten Import) Google Drive lesen.
-    if(forceRefresh || !rows.length){
+    // Beim ersten Start dieser neuen Angebotsversion einmalig aus Google Drive importieren.
+    // Danach kommt das normale Öffnen ausschließlich aus Supabase.
+    // Der Import-Schlüssel verhindert, dass bei jedem Seitenaufruf erneut alle PDFs gelesen werden.
+    let initialSyncDone=false;
+    try{ initialSyncDone=localStorage.getItem(OFFERS_INITIAL_SYNC_KEY)==='1'; }catch(e){}
+    const shouldSync=forceRefresh || !initialSyncDone;
+    if(shouldSync){
       const response=await fetch(`${ANGEBOTE_API_URL}?action=angebote&v=${Date.now()}`,{cache:'no-store'});
       const result=await response.json().catch(()=>({}));
       if(!response.ok||result.ok===false)throw new Error(result.error||'Angebotsdaten konnten nicht geladen werden.');
@@ -1157,6 +1163,11 @@ async function loadOffers(forceRefresh=false){
         const {data:fresh,error:freshError}=await db.from('offers').select('*').order('angebotsdatum',{ascending:false});
         if(freshError)throw freshError;
         rows=Array.isArray(fresh)?fresh.map(x=>({...x,datum:x.angebotsdatum,kunde:x.kundenname,dateiUrl:x.drive_url})):[];
+        // Nur als erfolgreich initialisiert markieren, wenn Drive mehr als ein Angebot liefert.
+        // So bleibt ein fehlerhafter/abgebrochener Import beim nächsten Öffnen erneut prüfbar.
+        if(!forceRefresh && driveRows.length>1){
+          try{ localStorage.setItem(OFFERS_INITIAL_SYNC_KEY,'1'); }catch(e){}
+        }
       }
     }
 
