@@ -115,7 +115,7 @@ const financialMonthLabel = document.getElementById('financialMonthLabel');
 const financialMonthlyTable = document.getElementById('financialMonthlyTable');
 const RECHNUNGS_API_URL = 'https://script.google.com/macros/s/AKfycbxJDx4fWqtWjWj056-ZsFJyVPBgB-6uarBsIH0Fmbf30F025o9CmlfhfKXvLU-KLh3Y/exec';
 const ANGEBOTE_API_URL = RECHNUNGS_API_URL;
-const OFFERS_INITIAL_SYNC_KEY = 'ts_serviceleistungen_offers_initial_sync_v3';
+const OFFERS_INITIAL_SYNC_KEY = 'ts_serviceleistungen_offers_initial_sync_v4';
 let currentOffers=[];
 let currentCustomers=[];
 let appointmentDate = new Date();
@@ -1101,6 +1101,18 @@ async function syncOfferCustomers(rows){
   }
 }
 
+function normalizeOfferDate(value){
+  if(value===null||value===undefined||value==='')return null;
+  const s=String(value).trim();
+  let m=s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if(m)return `${m[3]}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;
+  m=s.match(/^(\d{4})[\/.](\d{1,2})[\/.](\d{1,2})$/);
+  if(m)return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;
+  const d=new Date(s);
+  if(!Number.isNaN(d.getTime()))return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return null;
+}
+
 async function syncOffersToSupabase(rows){
   if(!Array.isArray(rows)||!rows.length)return [];
   const numbers=rows.map(r=>String(r.angebotsnummer||r.angebotsnr||'').trim()).filter(Boolean);
@@ -1113,7 +1125,7 @@ async function syncOffersToSupabase(rows){
     const old=savedMap.get(number);
     return {
       angebotsnummer:number,
-      angebotsdatum:r.angebotsdatum||r.datum||null,
+      angebotsdatum:normalizeOfferDate(r.angebotsdatum||r.datum||r.date),
       firma:r.firma||'',
       kundenname:r.kunde||r.kundenname||'',
       beschreibung:r.beschreibung||'',
