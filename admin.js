@@ -115,6 +115,39 @@ const financialMonthLabel = document.getElementById('financialMonthLabel');
 const financialMonthlyTable = document.getElementById('financialMonthlyTable');
 const RECHNUNGS_API_URL = 'https://script.google.com/macros/s/AKfycbxJDx4fWqtWjWj056-ZsFJyVPBgB-6uarBsIH0Fmbf30F025o9CmlfhfKXvLU-KLh3Y/exec';
 const ANGEBOTE_API_URL = RECHNUNGS_API_URL;
+
+// Google Apps Script GET-API ueber JSONP.
+// Verhindert CORS-Probleme beim Aufruf von GitHub Pages.
+function googleApiJsonp(baseUrl, params={}, timeoutMs=120000){
+  return new Promise((resolve,reject)=>{
+    const callbackName='__tsGoogleApi_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+    const script=document.createElement('script');
+    let finished=false;
+    const cleanup=()=>{
+      if(finished)return;
+      finished=true;
+      try{delete window[callbackName];}catch(e){window[callbackName]=undefined;}
+      script.remove();
+      clearTimeout(timer);
+    };
+    const timer=setTimeout(()=>{
+      cleanup();
+      reject(new Error('Google-API antwortet nicht rechtzeitig.'));
+    },timeoutMs);
+    window[callbackName]=(data)=>{
+      cleanup();
+      resolve(data||{});
+    };
+    script.onerror=()=>{
+      cleanup();
+      reject(new Error('Google-API konnte nicht geladen werden.'));
+    };
+    const query=new URLSearchParams({...params,callback:callbackName,v:String(Date.now())});
+    script.src=baseUrl+'?'+query.toString();
+    document.head.appendChild(script);
+  });
+}
+
 const OFFERS_INITIAL_SYNC_KEY = 'ts_serviceleistungen_offers_initial_sync_v4';
 let currentOffers=[];
 let currentCustomers=[];
@@ -509,9 +542,8 @@ async function loadFinancials(){
   // First load the invoice API. A failure must NOT prevent the expense side
   // of the financial overview from being rendered.
   try{
-    const response=await fetch(`${RECHNUNGS_API_URL}?year=${year}&v=${Date.now()}`,{cache:'no-store'});
-    const result=await response.json().catch(()=>({}));
-    if(response.ok && result.ok!==false){
+    const result=await googleApiJsonp(RECHNUNGS_API_URL,{year:year});
+    if(result && result.ok!==false){
       invoiceYear=Number(result.bruttoGesamtJahr ?? result.bruttoGesamt ?? 0)||0;
       if(Array.isArray(result.monatlich)){
         result.monatlich.forEach((v,i)=>{if(i<12) monthlyInvoices[i]=Number(v)||0;});
@@ -1021,9 +1053,8 @@ async function loadInvoices(){
   if(!invoiceList)return;
   invoiceList.innerHTML='<p>Rechnungen werden geladen...</p>';
   try{
-    const response=await fetch(`${RECHNUNGS_API_URL}?year=${new Date().getFullYear()}&v=${Date.now()}`,{cache:'no-store'});
-    const result=await response.json().catch(()=>({}));
-    if(!response.ok||result.ok===false)throw new Error(result.error||'Rechnungsdaten konnten nicht geladen werden.');
+    const result=await googleApiJsonp(RECHNUNGS_API_URL,{year:new Date().getFullYear()});
+    if(result.ok===false)throw new Error(result.error||'Rechnungsdaten konnten nicht geladen werden.');
     const rows=Array.isArray(result.rechnungen)?result.rechnungen:[];
     const year=Number(result.bruttoGesamtJahr??result.bruttoGesamt??0);
     const month=Number(result.bruttoGesamtMonat??0);
@@ -1115,28 +1146,12 @@ function normalizeOfferDate(value){
 
 async function syncOffersToSupabase(rows){
   if(!Array.isArray(rows)||!rows.length)return [];
-
-  // Vor dem Upsert nach Angebotsnummer deduplizieren.
-  // So kann dieselbe Conflict-Spalte nie zweimal in einem Upsert vorkommen.
-  const uniqueByNumber=new Map();
-  rows.forEach(function(r){
-    const number=String(r.angebotsnummer||r.angebotsnr||'').trim();
-    if(!number)return;
-    uniqueByNumber.set(number,r);
-  });
-
-  const uniqueRows=Array.from(uniqueByNumber.values());
-  const numbers=Array.from(uniqueByNumber.keys());
-  if(!numbers.length)return [];
-
+  const numbers=rows.map(r=>String(r.angebotsnummer||r.angebotsnr||'').trim()).filter(Boolean);
+  if(!numbers.length)return rows;
   const {data:saved,error}=await db.from('offers').select('*').in('angebotsnummer',numbers);
   if(error)throw error;
-
-  const savedMap=new Map((saved||[]).map(function(x){
-    return [String(x.angebotsnummer||'').trim(),x];
-  }));
-
-  const payload=uniqueRows.map(function(r){
+  const savedMap=new Map((saved||[]).map(x=>[String(x.angebotsnummer||'').trim(),x]));
+  const payload=rows.map(r=>{
     const number=String(r.angebotsnummer||r.angebotsnr||'').trim();
     const old=savedMap.get(number);
     return {
@@ -1146,18 +1161,13 @@ async function syncOffersToSupabase(rows){
       kundenname:r.kunde||r.kundenname||'',
       beschreibung:r.beschreibung||'',
       betrag:Number(r.betrag||0),
-      status:old && old.status ? old.status : (r.status||'Offen / In Bearbeitung'),
+      status:old?.status||r.status||'Offen / In Bearbeitung',
       dateiname:r.dateiname||'',
       drive_file_id:r.dateiId||r.drive_file_id||'',
       drive_url:r.dateiUrl||r.drive_url||''
     };
   });
-
-  const {error:upsertError}=await db.from('offers').upsert(
-    payload,
-    {onConflict:'angebotsnummer'}
-  );
-
+  const {error:upsertError}=await db.from('offers').upsert(payload,{onConflict:'angebotsnummer'});
   if(upsertError)throw upsertError;
   return payload;
 }
@@ -1188,9 +1198,8 @@ async function loadOffers(forceRefresh=false){
     // einmalig alle Angebote aus Google Drive übernehmen.
     const shouldSync=forceRefresh || !initialSyncDone || rows.length===0;
     if(shouldSync){
-      const response=await fetch(`${ANGEBOTE_API_URL}?action=angebote&v=${Date.now()}`,{cache:'no-store'});
-      const result=await response.json().catch(()=>({}));
-      if(!response.ok||result.ok===false)throw new Error(result.error||'Angebotsdaten konnten nicht geladen werden.');
+      const result=await googleApiJsonp(ANGEBOTE_API_URL,{action:'angebote'});
+      if(result.ok===false)throw new Error(result.error||'Angebotsdaten konnten nicht geladen werden.');
       const driveRows=Array.isArray(result.angebote)?result.angebote:[];
       if(driveRows.length){
         await syncOffersToSupabase(driveRows);
