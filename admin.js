@@ -115,7 +115,7 @@ const financialMonthLabel = document.getElementById('financialMonthLabel');
 const financialMonthlyTable = document.getElementById('financialMonthlyTable');
 const RECHNUNGS_API_URL = 'https://script.google.com/macros/s/AKfycbxJDx4fWqtWjWj056-ZsFJyVPBgB-6uarBsIH0Fmbf30F025o9CmlfhfKXvLU-KLh3Y/exec';
 const ANGEBOTE_API_URL = RECHNUNGS_API_URL;
-const OFFERS_INITIAL_SYNC_KEY = 'ts_serviceleistungen_offers_initial_sync_v2';
+const OFFERS_INITIAL_SYNC_KEY = 'ts_serviceleistungen_offers_initial_sync_v3';
 let currentOffers=[];
 let currentCustomers=[];
 let appointmentDate = new Date();
@@ -1151,7 +1151,9 @@ async function loadOffers(forceRefresh=false){
     // Der Import-Schlüssel verhindert, dass bei jedem Seitenaufruf erneut alle PDFs gelesen werden.
     let initialSyncDone=false;
     try{ initialSyncDone=localStorage.getItem(OFFERS_INITIAL_SYNC_KEY)==='1'; }catch(e){}
-    const shouldSync=forceRefresh || !initialSyncDone;
+    // Falls die Datenbank leer ist oder diese Version noch nicht initial importiert hat,
+    // einmalig alle Angebote aus Google Drive übernehmen.
+    const shouldSync=forceRefresh || !initialSyncDone || rows.length===0;
     if(shouldSync){
       const response=await fetch(`${ANGEBOTE_API_URL}?action=angebote&v=${Date.now()}`,{cache:'no-store'});
       const result=await response.json().catch(()=>({}));
@@ -1512,4 +1514,6 @@ nextMonthBtn?.addEventListener('click',()=>{
 loginForm.addEventListener('submit',async e=>{e.preventDefault();loginMsg.classList.add('hidden');const {error}=await db.auth.signInWithPassword({email:emailEl.value.trim(),password:passwordEl.value});if(error){showLoginMessage(error.message);return}await init()});
 listEl.addEventListener('click',async e=>{const button=e.target.closest('button[data-action]');if(!button)return;const id=button.dataset.id;const action=button.dataset.action;if(action==='details')return openDetails(id);if(action==='confirm')return confirmRequest(id);if(action==='reject')return rejectRequest(id);if(action==='alternative')return alternativeRequest(id);if(action==='delete')return deleteRequest(id)});
 detailActions.addEventListener('click',async e=>{const button=e.target.closest('button[data-modal-action]');if(!button||!selectedRequest)return;const action=button.dataset.modalAction;if(action==='confirm')await confirmRequest(selectedRequest.id);if(action==='reject')await rejectRequest(selectedRequest.id);if(action==='alternative')await alternativeRequest(selectedRequest.id);if(action==='delete')await deleteRequest(selectedRequest.id)});
-closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',async()=>{refreshBtn.disabled=true;try{await load();await loadReceipts();await loadFinancials();await loadInvoices();await loadOffers(false);await loadCustomers();}finally{refreshBtn.disabled=false;}});init();
+closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',async()=>{refreshBtn.disabled=true;try{await load();await loadReceipts();await loadFinancials();await loadInvoices();await loadOffers(false);await loadCustomers();}finally{refreshBtn.disabled=false;}});
+refreshOffersBtn?.addEventListener('click',async()=>{refreshOffersBtn.disabled=true;try{await loadOffers(true);}finally{refreshOffersBtn.disabled=false;}});
+init();
