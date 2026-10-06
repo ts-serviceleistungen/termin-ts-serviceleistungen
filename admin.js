@@ -961,6 +961,9 @@ async function loadInvoices(){
     const result=await response.json().catch(()=>({}));
     if(!response.ok||result.ok===false)throw new Error(result.error||'Rechnungsdaten konnten nicht geladen werden.');
     const rows=Array.isArray(result.rechnungen)?result.rechnungen:[];
+    // Rechnungskunden automatisch in den zentralen Kundenstamm übernehmen.
+    // Die Rechnungsberechnung selbst bleibt vollständig unverändert.
+    await syncInvoiceCustomers(rows);
     const year=Number(result.bruttoGesamtJahr??result.bruttoGesamt??0);
     const month=Number(result.bruttoGesamtMonat??0);
     if(invoiceTotal)invoiceTotal.textContent=euro(year);
@@ -973,6 +976,111 @@ async function loadInvoices(){
 }
 
 
+function normalizeCustomerText(value){
+  return String(value||'')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9äöüß]+/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+
+function splitInvoiceCustomerName(value){
+  const raw=String(value||'').trim();
+  if(!raw)return {firma:'',vorname:'',nachname:''};
+
+  // Firmenbezeichnungen erkennen, damit Firmen nicht fälschlich als Vor-/Nachname gespeichert werden.
+  if(/\b(gmbh|ug|ag|ohg|kg|gbr|e\.?k\.?|brandschutz|service|immobilien|bau|technik|fahrzeug|kfz|autohaus|betrieb)\b/i.test(raw)){
+    return {firma:raw,vorname:'',nachname:''};
+  }
+
+  const parts=raw.split(/\s+/).filter(Boolean);
+  if(parts.length===1)return {firma:'',vorname:'',nachname:parts[0]};
+  return {firma:'',vorname:parts[0],nachname:parts.slice(1).join(' ')};
+}
+
+async function syncInvoiceCustomers(rows){
+  if(!Array.isArray(rows)||!rows.length)return;
+
+  try{
+    const {data:existing,error:loadError}=await db.from('customers').select('*');
+    if(loadError)throw loadError;
+
+    const customers=Array.isArray(existing)?existing:[];
+    const byKey=new Map();
+    customers.forEach(c=>{
+      const full=[c.vorname,c.nachname].filter(Boolean).join(' ');
+      [c.firma,full,[c.firma,full].filter(Boolean).join(' ')].forEach(v=>{
+        const key=normalizeCustomerText(v);
+        if(key)byKey.set(key,c);
+      });
+    });
+
+    let created=0;
+    let updated=0;
+
+    for(const invoice of rows){
+      const rawName=String(invoice.kunde||'').trim();
+      if(!rawName)continue;
+
+      const parsed=splitInvoiceCustomerName(rawName);
+      const key=normalizeCustomerText(rawName);
+      let customer=byKey.get(key)||byKey.get(normalizeCustomerText(parsed.firma))||byKey.get(normalizeCustomerText([parsed.vorname,parsed.nachname].filter(Boolean).join(' ')));
+
+      if(customer){
+        // Nur leere Felder ergänzen. Manuell gepflegte Kundendaten werden nicht überschrieben.
+        const patch={};
+        if(!customer.firma&&parsed.firma)patch.firma=parsed.firma;
+        if(!customer.vorname&&parsed.vorname)patch.vorname=parsed.vorname;
+        if(!customer.nachname&&parsed.nachname)patch.nachname=parsed.nachname;
+        if(Object.keys(patch).length){
+          patch.updated_at=new Date().toISOString();
+          const {data,error}=await db.from('customers').update(patch).eq('id',customer.id).select('*').maybeSingle();
+          if(error)throw error;
+          customer=data||{...customer,...patch};
+          updated++;
+        }
+      }else{
+        const payload={
+          kundennummer:null,
+          firma:parsed.firma||null,
+          vorname:parsed.vorname||null,
+          nachname:parsed.nachname||null,
+          strasse:null,
+          hausnummer:null,
+          plz:null,
+          ort:null,
+          land:'Deutschland',
+          telefon:null,
+          email:null,
+          notizen:'Automatisch aus Rechnung übernommen',
+          created_at:new Date().toISOString(),
+          updated_at:new Date().toISOString()
+        };
+        const {data,error}=await db.from('customers').insert(payload).select('*').maybeSingle();
+        if(error)throw error;
+        customer=data;
+        if(customer){
+          created++;
+          const aliases=[customer.firma,[customer.vorname,customer.nachname].filter(Boolean).join(' '),rawName];
+          aliases.forEach(v=>{const k=normalizeCustomerText(v);if(k)byKey.set(k,customer);});
+        }
+      }
+    }
+
+    if(created||updated){
+      console.info(`Rechnungskunden synchronisiert: ${created} neu, ${updated} ergänzt.`);
+      // Falls der Kundenbereich gerade geöffnet ist, direkt aktualisieren.
+      if(!customersView?.classList.contains('hidden'))await loadCustomers();
+    }
+  }catch(err){
+    // Die Rechnungsseite darf niemals wegen der Kundenübernahme ausfallen.
+    console.warn('Rechnungskunden konnten nicht synchronisiert werden:',err.message);
+  }
+}
+
+
 async function loadOffers(){
   if(!offerList)return;
   offerList.innerHTML='<p>Angebote werden geladen...</p>';
@@ -982,7 +1090,8 @@ async function loadOffers(){
     if(!response.ok||result.ok===false)throw new Error(result.error||'Angebotsdaten konnten nicht geladen werden.');
     let rows=Array.isArray(result.angebote)?result.angebote:[];
 
-    // Bereits gespeicherte Statuswerte aus Supabase übernehmen.
+    // Persistierte Statuswerte aus der Supabase-Tabelle übernehmen.
+    // Die PDF-Auslesung bleibt dabei unverändert die Quelle für Angebotsdaten.
     try{
       const numbers=rows.map(r=>String(r.angebotsnummer||r.angebotsnr||'').trim()).filter(Boolean);
       if(numbers.length){
@@ -991,20 +1100,12 @@ async function loadOffers(){
           const byNumber=new Map(data.map(x=>[String(x.angebotsnummer||'').trim(),x]));
           rows=rows.map(r=>{
             const saved=byNumber.get(String(r.angebotsnummer||'').trim());
-            return saved?{...r,status:saved.status||r.status,customer_id:saved.customer_id||null}:r;
+            return saved?{...r,status:saved.status||r.status}:r;
           });
         }
       }
     }catch(statusErr){
       console.warn('Angebotsstatus aus Supabase konnte nicht geladen werden:',statusErr.message);
-    }
-
-    // Kundendaten aus den PDFs automatisch in das Kundenstammsystem übernehmen.
-    // Fehler hierbei blockieren die Angebotsanzeige nicht.
-    try{
-      await syncOfferCustomers(rows);
-    }catch(customerSyncError){
-      console.warn('Kundenübernahme aus Angeboten:',customerSyncError.message);
     }
 
     currentOffers=rows;
@@ -1013,64 +1114,6 @@ async function loadOffers(){
     currentOffers=[];
     offerList.innerHTML=`<p class="notice">Angebotsdaten konnten nicht geladen werden: ${escapeHtml(err.message)}</p>`;
     updateOfferTotals([]);
-  }
-}
-
-async function syncOfferCustomers(rows){
-  if(!Array.isArray(rows)||!rows.length)return;
-  for(const offer of rows){
-    const k=offer?.kundendaten||{};
-    const number=String(k.kundennummer||'').trim();
-    const email=String(k.email||'').trim();
-    const firma=String(k.firma||'').trim();
-    const vorname=String(k.vorname||'').trim();
-    const nachname=String(k.nachname||'').trim();
-    if(!number && !email && !firma && !vorname && !nachname)continue;
-
-    const payload={
-      kundennummer:number||null,
-      firma:firma||null,
-      vorname:vorname||null,
-      nachname:nachname||null,
-      strasse:String(k.strasse||'').trim()||null,
-      hausnummer:String(k.hausnummer||'').trim()||null,
-      plz:String(k.plz||'').trim()||null,
-      ort:String(k.ort||'').trim()||null,
-      land:String(k.land||'Deutschland').trim()||'Deutschland',
-      telefon:String(k.telefon||'').trim()||null,
-      email:email||null,
-      updated_at:new Date().toISOString()
-    };
-
-    let existing=null;
-    if(number){
-      const r=await db.from('customers').select('id').eq('kundennummer',number).limit(1).maybeSingle();
-      if(r.error)throw r.error;
-      existing=r.data;
-    }
-    if(!existing && email){
-      const r=await db.from('customers').select('id').ilike('email',email).limit(1).maybeSingle();
-      if(r.error)throw r.error;
-      existing=r.data;
-    }
-    if(!existing && firma && (vorname||nachname)){
-      const r=await db.from('customers').select('id').eq('firma',firma).eq('vorname',vorname||null).eq('nachname',nachname||null).limit(1).maybeSingle();
-      if(r.error)throw r.error;
-      existing=r.data;
-    }
-
-    let customerId=null;
-    if(existing?.id){
-      const r=await db.from('customers').update(payload).eq('id',existing.id).select('id').maybeSingle();
-      if(r.error)throw r.error;
-      customerId=r.data?.id||existing.id;
-    }else{
-      const r=await db.from('customers').insert(payload).select('id').maybeSingle();
-      if(r.error)throw r.error;
-      customerId=r.data?.id||null;
-    }
-
-    offer.customer_id=customerId;
   }
 }
 
@@ -1247,15 +1290,11 @@ function renderOffers(){
 async function saveOfferStatus(offer, status){
   const number=String(offer.angebotsnummer||offer.angebotsnr||'').trim();
   if(!number)return;
-  const {data:{session}}=await db.auth.getSession();
-  if(!session)throw new Error('Admin-Sitzung ist abgelaufen. Bitte erneut anmelden.');
-
   const payload={
     angebotsnummer:number,
     angebotsdatum:offer.angebotsdatum||offer.datum||null,
-    firma:offer.firma||offer.kundendaten?.firma||'',
-    kundenname:offer.kunde||offer.kundenname||([offer.kundendaten?.vorname,offer.kundendaten?.nachname].filter(Boolean).join(' '))||offer.kundendaten?.firma||'',
-    customer_id:offer.customer_id||null,
+    firma:offer.firma||'',
+    kundenname:offer.kunde||offer.kundenname||'',
     beschreibung:offer.beschreibung||'',
     betrag:Number(offer.betrag||0),
     status,
@@ -1263,21 +1302,9 @@ async function saveOfferStatus(offer, status){
     drive_file_id:offer.dateiId||offer.drive_file_id||'',
     drive_url:offer.dateiUrl||offer.drive_url||''
   };
-
-  // Erst vorhandenen Datensatz suchen. Dadurch vermeiden wir die komplizierte
-  // RLS-Upsert-Situation und brauchen kein RETURNING auf einen neuen Datensatz.
-  const existing=await db.from('offers').select('id').eq('angebotsnummer',number).limit(1).maybeSingle();
-  if(existing.error)throw existing.error;
-
-  if(existing.data?.id){
-    const result=await db.from('offers').update(payload).eq('id',existing.data.id);
-    if(result.error)throw result.error;
-  }else{
-    const result=await db.from('offers').insert(payload);
-    if(result.error)throw result.error;
-  }
+  const {error}=await db.from('offers').upsert(payload,{onConflict:'angebotsnummer'});
+  if(error)throw error;
 }
-
 
 async function handleOfferStatusChange(select){
   const number=select.dataset.offerNumber;
