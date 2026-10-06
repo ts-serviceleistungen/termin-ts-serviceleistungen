@@ -21,7 +21,7 @@
   <button data-nav="receipts" class="menu-card"><b class="menu-icon">▥</b><span>Belege<small>Belege und Ausgaben</small></span><i>›</i></button>
   <button data-nav="offers" class="menu-card gold-selected"><b class="menu-icon">▤</b><span>Angebote<small>Angebote und mögliche Einnahmen</small></span><i>›</i></button>
   <a class="menu-card" href="https://ts-serviceleistungen.github.io/ts-kalender/" target="_blank" rel="noopener"><b class="menu-icon">▦</b><span>Kalender<small>Termine und Schichten</small></span><i>›</i></a>
-  <button data-nav="customers" class="menu-card"><b class="menu-icon">♟</b><span>Kunden &amp; Firmen<small>Stammdaten verwalten</small></span><i>›</i></button>
+  <button class="menu-card"><b class="menu-icon">♟</b><span>Kunden &amp; Firmen<small>Stammdaten verwalten</small></span><i>›</i></button>
   <button class="menu-card"><b class="menu-icon">⚙</b><span>Einstellungen<small>Benutzer, Vorlagen und mehr</small></span><i>›</i></button>
 </div>
     <div class="stats-grid"><div class="stat"><small>Neue Terminanfragen</small><b id="dashNew">0</b><em>aktuell</em></div><div class="stat"><small>Offene Terminanfragen</small><b id="dashOpen">0</b><em>in Bearbeitung</em></div><div class="stat"><small>Termine heute</small><b id="dashToday">0</b><em>heute</em></div><div class="stat"><small>Belege gesamt</small><b id="dashReceiptCount">0</b><em>Archiv</em></div><div class="stat"><small>Ausgaben dieses Jahr · brutto</small><b id="dashYearGross">0,00 €</b><em id="financialYearLabel">2026</em></div><div class="stat"><small>Ausgaben diesen Monat · brutto</small><b id="dashMonthGross">0,00 €</b><em id="financialMonthLabel">—</em></div><div class="stat accent"><small>Rechnungen · Brutto gesamt</small><b id="dashInvoiceGross">0,00 €</b><em id="dashInvoiceMonth">Monat: 0,00 €</em></div><div class="stat profit"><small>Gewinn · Einnahmen minus Ausgaben</small><b id="dashProfit">0,00 €</b><em id="dashProfitMonth">Monat: 0,00 €</em></div></div>
@@ -37,7 +37,7 @@
   <section id="offersView" class="hidden">
     <div class="section-toolbar"><button type="button" class="back-dashboard" data-back-dashboard>← Dashboard</button></div>
     <section class="panel">
-      <div class="section-title"><div><span class="eyebrow">VERKAUF</span><h2>Angebote</h2><p>Angebote und mögliche Einnahmen</p></div><button type="button" id="refreshOffersBtn" class="small-btn">↻ Angebote aktualisieren</button></div>
+      <div class="section-title"><div><span class="eyebrow">VERKAUF</span><h2>Angebote</h2><p>Angebote und mögliche Einnahmen</p></div></div>
       <div class="finance-cards">
         <div><small>Alle Angebote · <span id="offerCount">0</span></small><b id="offerTotal">0,00 €</b></div>
         <div><small>Offen / In Bearbeitung</small><b id="offerOpenTotal">0,00 €</b></div>
@@ -53,41 +53,8 @@
     </section>
   </section>
 
-  <section id="customersView" class="hidden">
-    <div class="section-toolbar"><button type="button" class="back-dashboard" data-back-dashboard>← Dashboard</button></div>
-    <section class="panel">
-      <div class="section-title"><div><span class="eyebrow">STAMMDATEN</span><h2>Kunden &amp; Firmen</h2><p>Kundenstamm verwalten</p></div></div>
-      <div class="finance-cards"><div><small>Kunden gesamt</small><b id="customerCount">0</b></div></div>
-      <div class="field-grid" style="margin-top:18px">
-        <label>Suche<input id="customerSearch" class="search" placeholder="Kundennummer, Firma, Name, Ort oder E-Mail suchen…"></label>
-      </div>
-      <form id="customerForm" class="receipt-form" style="margin-top:18px">
-        <input type="hidden" id="customerId">
-        <div class="field-grid">
-          <label>Kundennummer<input id="customerNumber" type="text"></label>
-          <label>Firma<input id="customerCompany" type="text"></label>
-          <label>Vorname<input id="customerFirstName" type="text"></label>
-          <label>Nachname<input id="customerLastName" type="text"></label>
-          <label>Straße<input id="customerStreet" type="text"></label>
-          <label>Hausnummer<input id="customerHouseNumber" type="text"></label>
-          <label>PLZ<input id="customerZip" type="text"></label>
-          <label>Ort<input id="customerCity" type="text"></label>
-          <label>Telefon<input id="customerPhone" type="tel"></label>
-          <label>E-Mail<input id="customerEmail" type="email"></label>
-        </div>
-        <label>Notizen<input id="customerNotes" type="text"></label>
-        <p id="customerMsg" class="notice hidden"></p>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
-          <button id="saveCustomerBtn" class="gold-btn" type="submit">Kunde speichern</button>
-          <button id="cancelCustomerBtn" class="small-btn" type="button">Formular leeren</button>
-        </div>
-      </form>
-    </section>
-    <section class="panel"><div class="panel-head"><b>Alle Kunden und Firmen</b></div><div id="customerList"></div></section>
-  </section>
-
   <section id="receiptsView" class="hidden"><div class="section-toolbar"><button type="button" class="back-dashboard" data-back-dashboard>← Dashboard</button></div><section class="panel"><div class="section-title"><div><span class="eyebrow">AUSGABEN</span><h2>Belege</h2><p>Belege erfassen und Ausgaben verwalten</p></div></div><form id="receiptForm" class="receipt-form"><label>Belegfoto<input id="receiptImage" type="file" accept="image/*" capture="environment" required></label><button type="button" id="ocrReceipt" class="gold-btn">🔎 Beleg automatisch erkennen</button><p id="ocrMsg" class="notice hidden"></p><div class="field-grid"><label>Datum<input id="receiptDate" type="date" required></label><label>Händler / Geschäft<input id="receiptMerchant" type="text"></label><label>Belegnummer<input id="receiptNumber" type="text"></label><label>Bruttobetrag (€)<input id="receiptGross" type="number" min="0" step="0.01" required></label><label>Kategorie<select id="receiptCategory"><option>KFZ</option><option>Kraftstoff</option><option>Ersatzteile</option><option>Betriebsmittel</option><option>Büro</option><option>Sonstiges</option></select></label><label>Zahlungsart<select id="receiptPayment"><option>Bar</option><option>EC/Karte</option><option>Überweisung</option><option>Sonstiges</option></select></label></div><label>Beschreibung<input id="receiptDescription" type="text"></label><p id="receiptMsg" class="notice hidden"></p><button id="saveReceiptBtn" class="gold-btn" type="submit">Beleg speichern</button></form></section><section class="panel"><div class="panel-head"><b>Alle Belege</b></div><div id="receiptList"></div></section></section>
 </section></main>
 <div id="detailModal" class="modal hidden"><div class="modal-card"><div class="modal-head"><div><span class="eyebrow">ANFRAGE</span><h2 id="detailTitle">Details</h2></div><button id="closeModal" class="close">×</button></div><div id="detailBody"></div><div id="detailActions" class="modal-actions"></div></div></div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="config.js"></script><script src="admin.js?v=20261005"></script><script src="./pwa.js?v=20261005-3"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="config.js"></script><script src="admin.js?v=20261006-offers5"></script><script src="./pwa.js?v=20261005-3"></script>
 </body></html>

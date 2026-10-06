@@ -115,7 +115,7 @@ const financialMonthLabel = document.getElementById('financialMonthLabel');
 const financialMonthlyTable = document.getElementById('financialMonthlyTable');
 const RECHNUNGS_API_URL = 'https://script.google.com/macros/s/AKfycbxJDx4fWqtWjWj056-ZsFJyVPBgB-6uarBsIH0Fmbf30F025o9CmlfhfKXvLU-KLh3Y/exec';
 const ANGEBOTE_API_URL = RECHNUNGS_API_URL;
-const OFFERS_INITIAL_SYNC_KEY = 'ts_serviceleistungen_offers_initial_sync_v4';
+const OFFERS_INITIAL_SYNC_KEY = 'ts_serviceleistungen_offers_initial_sync_v5';
 let currentOffers=[];
 let currentCustomers=[];
 let appointmentDate = new Date();
@@ -1173,13 +1173,13 @@ async function loadOffers(forceRefresh=false){
       const driveRows=Array.isArray(result.angebote)?result.angebote:[];
       if(driveRows.length){
         await syncOffersToSupabase(driveRows);
-        await syncOfferCustomers(driveRows);
+        // Kundenübernahme läuft bewusst im Hintergrund und darf den Angebotsimport nicht blockieren.
+        syncOfferCustomers(driveRows).catch(err=>console.warn('Kundenübernahme aus Angeboten:',err.message));
         const {data:fresh,error:freshError}=await db.from('offers').select('*').order('angebotsdatum',{ascending:false});
         if(freshError)throw freshError;
         rows=Array.isArray(fresh)?fresh.map(x=>({...x,datum:x.angebotsdatum,kunde:x.kundenname,dateiUrl:x.drive_url})):[];
-        // Nur als erfolgreich initialisiert markieren, wenn Drive mehr als ein Angebot liefert.
-        // So bleibt ein fehlerhafter/abgebrochener Import beim nächsten Öffnen erneut prüfbar.
-        if(!forceRefresh && driveRows.length>1){
+        // Nur als erfolgreich initialisiert markieren, wenn mindestens ein Angebot importiert wurde.
+        if(!forceRefresh && driveRows.length>0){
           try{ localStorage.setItem(OFFERS_INITIAL_SYNC_KEY,'1'); }catch(e){}
         }
       }
@@ -1371,7 +1371,7 @@ async function saveOfferStatus(offer, status){
   if(!number)return;
   const payload={
     angebotsnummer:number,
-    angebotsdatum:offer.angebotsdatum||offer.datum||null,
+    angebotsdatum:normalizeOfferDate(offer.angebotsdatum||offer.datum||offer.date),
     firma:offer.firma||'',
     kundenname:offer.kunde||offer.kundenname||'',
     beschreibung:offer.beschreibung||'',
