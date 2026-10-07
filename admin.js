@@ -119,7 +119,7 @@ const ANGEBOTE_API_URL = RECHNUNGS_API_URL;
 // Google Apps Script GET-API über JSONP.
 // GitHub Pages darf die Apps-Script-Antwort nicht per fetch() lesen,
 // weil Apps Script hier keinen Access-Control-Allow-Origin-Header liefert.
-function googleApiJsonp(baseUrl, params={}, timeoutMs=120000){
+function googleApiJsonp(baseUrl, params={}, timeoutMs=330000){
   return new Promise((resolve,reject)=>{
     // Nur einfache Buchstaben/Ziffern im Callback-Namen verwenden.
     // Das ist mit Google Apps Script JSONP maximal kompatibel.
@@ -1239,7 +1239,7 @@ async function syncOffersToSupabase(rows){
 
 async function loadOffers(forceRefresh=false){
   if(!offerList)return;
-  offerList.innerHTML=forceRefresh?'<p>Angebote werden aktualisiert...</p>':'<p>Gespeicherte Angebote werden geladen...</p>';
+  offerList.innerHTML=forceRefresh?'<p>Angebote werden aktualisiert… Google Drive wird gelesen. Das kann bei vielen PDFs einige Minuten dauern.</p>':'<p>Gespeicherte Angebote werden geladen...</p>';
   try{
     // Normal: ausschließlich Supabase verwenden. Dadurch wird nicht bei jedem Öffnen
     // erneut jedes PDF aus Google Drive gelesen.
