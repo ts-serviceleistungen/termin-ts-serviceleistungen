@@ -70,7 +70,7 @@ const dashProfit = document.getElementById('dashProfit');
 
 const INVOICE_TOTAL_URL = 'https://script.google.com/macros/s/AKfycbziO0qeGhs0URutEScjmDNF3tUPGiefZW37s6JxOQSJoY1PHpt2LwxzRQCxC0AMgX0q/exec';
 const RECEIPT_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbziO0qeGhs0URutEScjmDNF3tUPGiefZW37s6JxOQSJoY1PHpt2LwxzRQCxC0AMgX0q/exec';
-const BELEG_UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbziO0qeGhs0URutEScjmDNF3tUPGiefZW37s6JxOQSJoY1PHpt2LwxzRQCxC0AMgX0q/exec';
+const BELEG_UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbxJDx4fWqtWjWj056-ZsFJyVPBgB-6uarBsIH0Fmbf30F025o9CmlfhfKXvLU-KLh3Y/exec';
 const receiptForm = document.getElementById('receiptForm');
 const receiptImage = document.getElementById('receiptImage');
 const receiptDate = document.getElementById('receiptDate');
@@ -115,40 +115,7 @@ const financialMonthLabel = document.getElementById('financialMonthLabel');
 const financialMonthlyTable = document.getElementById('financialMonthlyTable');
 const RECHNUNGS_API_URL = 'https://script.google.com/macros/s/AKfycbxJDx4fWqtWjWj056-ZsFJyVPBgB-6uarBsIH0Fmbf30F025o9CmlfhfKXvLU-KLh3Y/exec';
 const ANGEBOTE_API_URL = RECHNUNGS_API_URL;
-
-// Google Apps Script GET-API ueber JSONP.
-// Verhindert CORS-Probleme beim Aufruf von GitHub Pages.
-function googleApiJsonp(baseUrl, params={}, timeoutMs=120000){
-  return new Promise((resolve,reject)=>{
-    const callbackName='__tsGoogleApi_'+Date.now()+'_'+Math.random().toString(36).slice(2);
-    const script=document.createElement('script');
-    let finished=false;
-    const cleanup=()=>{
-      if(finished)return;
-      finished=true;
-      try{delete window[callbackName];}catch(e){window[callbackName]=undefined;}
-      script.remove();
-      clearTimeout(timer);
-    };
-    const timer=setTimeout(()=>{
-      cleanup();
-      reject(new Error('Google-API antwortet nicht rechtzeitig.'));
-    },timeoutMs);
-    window[callbackName]=(data)=>{
-      cleanup();
-      resolve(data||{});
-    };
-    script.onerror=()=>{
-      cleanup();
-      reject(new Error('Google-API konnte nicht geladen werden.'));
-    };
-    const query=new URLSearchParams({...params,callback:callbackName,v:String(Date.now())});
-    script.src=baseUrl+'?'+query.toString();
-    document.head.appendChild(script);
-  });
-}
-
-const OFFERS_INITIAL_SYNC_KEY = 'ts_serviceleistungen_offers_initial_sync_v4';
+const OFFERS_INITIAL_SYNC_KEY = 'ts_serviceleistungen_offers_initial_sync_v5';
 let currentOffers=[];
 let currentCustomers=[];
 let appointmentDate = new Date();
@@ -542,8 +509,9 @@ async function loadFinancials(){
   // First load the invoice API. A failure must NOT prevent the expense side
   // of the financial overview from being rendered.
   try{
-    const result=await googleApiJsonp(RECHNUNGS_API_URL,{year:year});
-    if(result && result.ok!==false){
+    const response=await fetch(`${RECHNUNGS_API_URL}?year=${year}&v=${Date.now()}`,{cache:'no-store'});
+    const result=await response.json().catch(()=>({}));
+    if(response.ok && result.ok!==false){
       invoiceYear=Number(result.bruttoGesamtJahr ?? result.bruttoGesamt ?? 0)||0;
       if(Array.isArray(result.monatlich)){
         result.monatlich.forEach((v,i)=>{if(i<12) monthlyInvoices[i]=Number(v)||0;});
@@ -750,6 +718,9 @@ function fileToDataUrl(file){
 }
 
 async function pdfFirstPageToDataUrl(file){
+  if(typeof pdfjsLib!=='undefined' && pdfjsLib.GlobalWorkerOptions){
+    pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
   if(typeof pdfjsLib==='undefined'){
     throw new Error('Die PDF-Bibliothek konnte nicht geladen werden. Bitte die Seite einmal mit Strg+F5 neu laden.');
   }
@@ -1053,8 +1024,9 @@ async function loadInvoices(){
   if(!invoiceList)return;
   invoiceList.innerHTML='<p>Rechnungen werden geladen...</p>';
   try{
-    const result=await googleApiJsonp(RECHNUNGS_API_URL,{year:new Date().getFullYear()});
-    if(result.ok===false)throw new Error(result.error||'Rechnungsdaten konnten nicht geladen werden.');
+    const response=await fetch(`${RECHNUNGS_API_URL}?year=${new Date().getFullYear()}&v=${Date.now()}`,{cache:'no-store'});
+    const result=await response.json().catch(()=>({}));
+    if(!response.ok||result.ok===false)throw new Error(result.error||'Rechnungsdaten konnten nicht geladen werden.');
     const rows=Array.isArray(result.rechnungen)?result.rechnungen:[];
     const year=Number(result.bruttoGesamtJahr??result.bruttoGesamt??0);
     const month=Number(result.bruttoGesamtMonat??0);
@@ -1146,23 +1118,52 @@ function normalizeOfferDate(value){
 
 async function syncOffersToSupabase(rows){
   if(!Array.isArray(rows)||!rows.length)return [];
-  const numbers=rows.map(r=>String(r.angebotsnummer||r.angebotsnr||'').trim()).filter(Boolean);
-  if(!numbers.length)return rows;
+
+  // Google Drive kann bei einem manuellen/erneuten Import dieselbe
+  // Angebotsnummer mehrfach liefern. Supabase/Postgres lehnt ein UPSERT
+  // mit demselben Conflict-Key innerhalb eines Statements ab.
+  // Deshalb wird VOR dem UPSERT eindeutig nach Angebotsnummer dedupliziert.
+  const uniqueMap=new Map();
+  let duplicateCount=0;
+
+  for(const r of rows){
+    const number=String(r?.angebotsnummer||r?.angebotsnr||'').trim();
+    if(!number)continue;
+
+    const normalized={
+      ...r,
+      angebotsnummer:number
+    };
+
+    if(uniqueMap.has(number)){
+      duplicateCount++;
+      const previous=uniqueMap.get(number);
+      // Den Datensatz mit den vollständigeren Angaben behalten.
+      const score=(x)=>[
+        x?.betrag,
+        x?.angebotsdatum||x?.datum||x?.date,
+        x?.kunde||x?.kundenname,
+        x?.firma,
+        x?.beschreibung,
+        x?.dateiId||x?.drive_file_id,
+        x?.dateiUrl||x?.drive_url
+      ].filter(v=>v!==undefined&&v!==null&&String(v).trim()!=='').length;
+      if(score(normalized)>=score(previous))uniqueMap.set(number,normalized);
+    }else{
+      uniqueMap.set(number,normalized);
+    }
+  }
+
+  const cleanRows=[...uniqueMap.values()];
+  if(!cleanRows.length)return [];
+
+  const numbers=cleanRows.map(r=>r.angebotsnummer);
   const {data:saved,error}=await db.from('offers').select('*').in('angebotsnummer',numbers);
   if(error)throw error;
   const savedMap=new Map((saved||[]).map(x=>[String(x.angebotsnummer||'').trim(),x]));
-  // Google Drive kann bei einem Import dieselbe Angebotsnummer mehrfach liefern.
-  // Supabase darf aber innerhalb eines einzigen upsert()-Aufrufs denselben
-  // Konfliktschlüssel nicht zweimal verarbeiten. Deshalb wird VOR dem Schreiben
-  // eindeutig nach Angebotsnummer zusammengeführt.
-  const uniqueRows=new Map();
-  rows.forEach(r=>{
-    const number=String(r.angebotsnummer||r.angebotsnr||'').trim();
-    if(number) uniqueRows.set(number,r);
-  });
 
-  const payload=Array.from(uniqueRows.values()).map(r=>{
-    const number=String(r.angebotsnummer||r.angebotsnr||'').trim();
+  const payload=cleanRows.map(r=>{
+    const number=String(r.angebotsnummer||'').trim();
     const old=savedMap.get(number);
     return {
       angebotsnummer:number,
@@ -1180,6 +1181,10 @@ async function syncOffersToSupabase(rows){
 
   const {error:upsertError}=await db.from('offers').upsert(payload,{onConflict:'angebotsnummer'});
   if(upsertError)throw upsertError;
+
+  if(duplicateCount){
+    console.info(`Angebote: ${duplicateCount} doppelte Angebotsnummer(n) beim Import bereinigt.`);
+  }
   return payload;
 }
 
@@ -1209,18 +1214,19 @@ async function loadOffers(forceRefresh=false){
     // einmalig alle Angebote aus Google Drive übernehmen.
     const shouldSync=forceRefresh || !initialSyncDone || rows.length===0;
     if(shouldSync){
-      const result=await googleApiJsonp(ANGEBOTE_API_URL,{action:'angebote'});
-      if(result.ok===false)throw new Error(result.error||'Angebotsdaten konnten nicht geladen werden.');
+      const response=await fetch(`${ANGEBOTE_API_URL}?action=angebote&v=${Date.now()}`,{cache:'no-store'});
+      const result=await response.json().catch(()=>({}));
+      if(!response.ok||result.ok===false)throw new Error(result.error||'Angebotsdaten konnten nicht geladen werden.');
       const driveRows=Array.isArray(result.angebote)?result.angebote:[];
       if(driveRows.length){
         await syncOffersToSupabase(driveRows);
-        await syncOfferCustomers(driveRows);
+        // Kundenübernahme läuft bewusst im Hintergrund und darf den Angebotsimport nicht blockieren.
+        syncOfferCustomers(driveRows).catch(err=>console.warn('Kundenübernahme aus Angeboten:',err.message));
         const {data:fresh,error:freshError}=await db.from('offers').select('*').order('angebotsdatum',{ascending:false});
         if(freshError)throw freshError;
         rows=Array.isArray(fresh)?fresh.map(x=>({...x,datum:x.angebotsdatum,kunde:x.kundenname,dateiUrl:x.drive_url})):[];
-        // Nur als erfolgreich initialisiert markieren, wenn Drive mehr als ein Angebot liefert.
-        // So bleibt ein fehlerhafter/abgebrochener Import beim nächsten Öffnen erneut prüfbar.
-        if(!forceRefresh && driveRows.length>1){
+        // Nur als erfolgreich initialisiert markieren, wenn mindestens ein Angebot importiert wurde.
+        if(!forceRefresh && driveRows.length>0){
           try{ localStorage.setItem(OFFERS_INITIAL_SYNC_KEY,'1'); }catch(e){}
         }
       }
@@ -1412,7 +1418,7 @@ async function saveOfferStatus(offer, status){
   if(!number)return;
   const payload={
     angebotsnummer:number,
-    angebotsdatum:offer.angebotsdatum||offer.datum||null,
+    angebotsdatum:normalizeOfferDate(offer.angebotsdatum||offer.datum||offer.date),
     firma:offer.firma||'',
     kundenname:offer.kunde||offer.kundenname||'',
     beschreibung:offer.beschreibung||'',
