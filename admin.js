@@ -121,31 +121,45 @@ const ANGEBOTE_API_URL = RECHNUNGS_API_URL;
 // weil Apps Script hier keinen Access-Control-Allow-Origin-Header liefert.
 function googleApiJsonp(baseUrl, params={}, timeoutMs=120000){
   return new Promise((resolve,reject)=>{
-    const callbackName='__tsGoogleApi_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+    // Nur einfache Buchstaben/Ziffern im Callback-Namen verwenden.
+    // Das ist mit Google Apps Script JSONP maximal kompatibel.
+    const callbackName='tsGoogleApi'+Date.now()+Math.random().toString(36).slice(2);
     const script=document.createElement('script');
     let finished=false;
     let timer=null;
+
     const cleanup=()=>{
       if(finished)return;
       finished=true;
       try{delete window[callbackName];}catch(e){window[callbackName]=undefined;}
-      script.remove();
+      if(script.parentNode)script.parentNode.removeChild(script);
       if(timer)clearTimeout(timer);
     };
-    timer=setTimeout(()=>{
-      cleanup();
-      reject(new Error('Google-API antwortet nicht rechtzeitig.'));
-    },timeoutMs);
+
     window[callbackName]=(data)=>{
       cleanup();
       resolve(data||{});
     };
+
     script.onerror=()=>{
       cleanup();
       reject(new Error('Google-API konnte nicht geladen werden.'));
     };
-    const query=new URLSearchParams({...params,callback:callbackName,v:String(Date.now())});
+
+    timer=setTimeout(()=>{
+      cleanup();
+      reject(new Error('Google-API antwortet nicht rechtzeitig.'));
+    },timeoutMs);
+
+    const query=new URLSearchParams();
+    Object.entries(params||{}).forEach(([key,value])=>{
+      if(value!==undefined && value!==null)query.set(key,String(value));
+    });
+    query.set('callback',callbackName);
+    query.set('v',String(Date.now()));
+
     script.src=baseUrl+'?'+query.toString();
+    script.async=true;
     document.head.appendChild(script);
   });
 }
