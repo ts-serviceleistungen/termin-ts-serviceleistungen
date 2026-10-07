@@ -993,78 +993,289 @@ async function deleteReceipt(id){
 
 
 function normalizeCustomerText(value){
-  return String(value??'').toLowerCase().trim().replace(/\s+/g,' ').replace(/[.,;:()[\]{}]/g,'');
+  return String(value??'').toLowerCase().trim().replace(/\s+/g,' ').replace(/[.,;:()\[\]{}]/g,'');
 }
-function normalizeCustomerEmail(value){return String(value??'').trim().toLowerCase();}
-function normalizeCustomerPhone(value){return String(value??'').replace(/[^\d+]/g,'').replace(/^00/,'+');}
+
 function invoiceCustomerParts(value){
-  let raw=String(value??'').trim().replace(/^(herr|frau|familie|firma)\s+/i,'');
+  const raw=String(value??'').trim();
   if(!raw)return {firma:'',vorname:'',nachname:''};
-  const business=/\b(gmbh|ug|ag|kg|ohg|gbr|e\.k\.|e\.v\.|brandschutz|service|leistungen|fahrzeug|autohaus|autoteile|werkstatt|immobilien|verwaltung|handel|technik|solutions|logistik|bau|versicherung|hotel|gastronomie)\b/i.test(raw);
+  const business=/\b(gmbh|ug|ag|kg|ohg|gbr|e\.k\.|e\.v\.|brandschutz|service|leistungen|fahrzeug|autohaus|autoteile|werkstatt|immobilien|verwaltung|handel|technik|solutions|logistik|bau|bauunternehmen|versicherung|hotel|gastronomie)\b/i.test(raw);
   const parts=raw.split(/\s+/).filter(Boolean);
-  if(!business&&parts.length>=2)return {firma:'',vorname:parts[0],nachname:parts.slice(1).join(' ')};
+  if(!business && parts.length===2)return {firma:'',vorname:parts[0],nachname:parts[1]};
   return {firma:raw,vorname:'',nachname:''};
 }
-function customerFullName(c){return normalizeCustomerText([c?.vorname,c?.nachname].filter(Boolean).join(' '));}
-function customerAddressKey(c){return normalizeCustomerText([c?.strasse,c?.hausnummer,c?.plz,c?.ort].filter(Boolean).join(' '));}
-function findCustomerMatch(customers,source){
-  const number=String(source.kundennummer||'').trim();
-  const email=normalizeCustomerEmail(source.email);
-  const phone=normalizeCustomerPhone(source.telefon);
-  const company=normalizeCustomerText(source.firma);
-  const name=normalizeCustomerText([source.vorname,source.nachname].filter(Boolean).join(' '));
-  const address=customerAddressKey(source);
-  if(number){const x=customers.find(c=>String(c.kundennummer||'').trim()===number);if(x)return x;}
-  if(email){const x=customers.find(c=>normalizeCustomerEmail(c.email)===email);if(x)return x;}
-  if(phone&&phone.length>=7){const x=customers.find(c=>normalizeCustomerPhone(c.telefon)===phone);if(x)return x;}
-  if(company&&name){const x=customers.find(c=>normalizeCustomerText(c.firma)===company&&customerFullName(c)===name);if(x)return x;}
-  if(name){const hits=customers.filter(c=>customerFullName(c)===name);if(hits.length===1)return hits[0];}
-  if(company){const hits=customers.filter(c=>normalizeCustomerText(c.firma)===company);if(hits.length===1)return hits[0];}
-  if(address){const hits=customers.filter(c=>customerAddressKey(c)===address);if(hits.length===1)return hits[0];}
-  return null;
-}
-async function mergeCustomerSource(customers,source,sourceLabel){
-  const clean={};
-  for(const key of ['kundennummer','firma','vorname','nachname','strasse','hausnummer','plz','ort','land','telefon','email']){
-    clean[key]=String(source?.[key]??'').trim()||null;
-  }
-  clean.email=normalizeCustomerEmail(clean.email)||null;
-  clean.land=clean.land||'Deutschland';
-  if(!clean.kundennummer&&!clean.firma&&!clean.vorname&&!clean.nachname&&!clean.email&&!clean.telefon)return null;
-  let match=findCustomerMatch(customers,clean);
-  if(match){
-    const patch={updated_at:new Date().toISOString()};
-    const autoImported=String(match.notizen||'').toLowerCase().includes('automatisch aus');
-    for(const key of ['kundennummer','firma','vorname','nachname','strasse','hausnummer','plz','ort','land','telefon','email']){
-      if(clean[key]&&(!match[key]||autoImported)&&String(match[key]||'').trim()!==String(clean[key]).trim())patch[key]=clean[key];
-    }
-    if(autoImported)patch.notizen=`Automatisch aus ${sourceLabel} übernommen.`;
-    if(Object.keys(patch).length>1){
-      const {data,error}=await db.from('customers').update(patch).eq('id',match.id).select().single();
-      if(error)console.warn(`${sourceLabel}-Kunde konnte nicht aktualisiert werden:`,error.message);
-      else Object.assign(match,data||patch);
-    }
-    return match;
-  }
-  const payload={...clean,notizen:`Automatisch aus ${sourceLabel} übernommen.`,updated_at:new Date().toISOString()};
-  const {data:newCustomer,error}=await db.from('customers').insert(payload).select().single();
-  if(error){console.warn(`${sourceLabel}-Kunde konnte nicht angelegt werden:`,error.message);return null;}
-  customers.push(newCustomer);
-  return newCustomer;
-}
+
 async function syncInvoiceCustomers(rows){
   if(!Array.isArray(rows)||!rows.length)return;
   try{
-    const {data:existing,error}=await db.from('customers').select('*'); if(error)throw error;
+    const {data:existing,error}=await db.from('customers').select('*');
+    if(error)throw error;
     const customers=Array.isArray(existing)?existing:[];
+    let changed=false;
     for(const invoice of rows){
-      const raw=String(invoice.kunde||'').trim(); if(!raw||raw==='—')continue;
-      const p=invoiceCustomerParts(raw);
-      await mergeCustomerSource(customers,{firma:p.firma,vorname:p.vorname,nachname:p.nachname,land:'Deutschland'},'Rechnung');
+      const invoiceName=String(invoice.kunde||'').trim();
+      if(!invoiceName || invoiceName==='—')continue;
+      const norm=normalizeCustomerText(invoiceName);
+      const parts=invoiceCustomerParts(invoiceName);
+      const fullName=normalizeCustomerText([parts.vorname,parts.nachname].filter(Boolean).join(' '));
+      let match=customers.find(c=>{
+        const company=normalizeCustomerText(c.firma);
+        const name=normalizeCustomerText([c.vorname,c.nachname].filter(Boolean).join(' '));
+        return company===norm || name===norm || (fullName && name===fullName);
+      });
+      if(match){
+        const patch={updated_at:new Date().toISOString()};
+        if(!match.firma && parts.firma)patch.firma=parts.firma;
+        if(!match.vorname && parts.vorname)patch.vorname=parts.vorname;
+        if(!match.nachname && parts.nachname)patch.nachname=parts.nachname;
+        if(Object.keys(patch).length>1){
+          const {error:updateError}=await db.from('customers').update(patch).eq('id',match.id);
+          if(updateError)console.warn('Rechnungskunde konnte nicht ergänzt werden:',updateError.message);
+          else Object.assign(match,patch);
+        }
+      }else{
+        const payload={
+          kundennummer:null,
+          firma:parts.firma||null,
+          vorname:parts.vorname||null,
+          nachname:parts.nachname||null,
+          strasse:null,hausnummer:null,plz:null,ort:null,land:'Deutschland',
+          telefon:null,email:null,notizen:'Automatisch aus Rechnung übernommen.',
+          updated_at:new Date().toISOString()
+        };
+        const {data:newCustomer,error:insertError}=await db.from('customers').insert(payload).select().single();
+        if(insertError)console.warn('Rechnungskunde konnte nicht angelegt werden:',insertError.message);
+        else if(newCustomer){customers.push(newCustomer);changed=true;}
+      }
     }
-    if(customersView&&!customersView.classList.contains('hidden')){currentCustomers=customers;renderCustomers();}
-  }catch(err){console.warn('Kundenübernahme aus Rechnungen fehlgeschlagen:',err.message);}
+    if(changed && customersView && !customersView.classList.contains('hidden'))renderCustomers();
+  }catch(err){
+    console.warn('Kundenübernahme aus Rechnungen fehlgeschlagen:',err.message);
+  }
 }
+
+async function loadInvoices(){
+  if(!invoiceList)return;
+  invoiceList.innerHTML='<p>Rechnungen werden geladen...</p>';
+  try{
+    const result=await googleApiJsonp(RECHNUNGS_API_URL,{year:new Date().getFullYear()});
+    if(result.ok===false)throw new Error(result.error||'Rechnungsdaten konnten nicht geladen werden.');
+    const rows=Array.isArray(result.rechnungen)?result.rechnungen:[];
+    const year=Number(result.bruttoGesamtJahr??result.bruttoGesamt??0);
+    const month=Number(result.bruttoGesamtMonat??0);
+    if(invoiceTotal)invoiceTotal.textContent=euro(year);
+    if(invoiceMonthTotal)invoiceMonthTotal.textContent=euro(month);
+    if(!rows.length){invoiceList.innerHTML='<div class="empty-box">Die Rechnungs-API liefert aktuell nur Summen. Sobald die erweiterte <b>doGet()</b>-Version eingespielt ist, erscheinen hier wieder alle Rechnungen.</div>';return;}
+
+    // Rechnungen speisen zusätzlich den gemeinsamen Kundenstamm.
+    // Die eigentliche Rechnungsberechnung oben bleibt unverändert.
+    await syncInvoiceCustomers(rows);
+
+    const q=(invoiceSearch?.value||'').trim().toLowerCase();
+    const filtered=rows.filter(r=>[r.rechnungsnummer,r.kunde,r.beschreibung,r.rechnungsdatum].join(' ').toLowerCase().includes(q));
+    invoiceList.innerHTML=filtered.length?`<div class="invoice-table"><div class="invoice-row invoice-head"><span>Datum</span><span>Rechnungsnr.</span><span>Kunde</span><span>Beschreibung</span><span>Brutto</span><span>Quelle</span></div>${filtered.map(r=>`<div class="invoice-row"><span>${escapeHtml(r.rechnungsdatum||'—')}</span><span><b>${escapeHtml(r.rechnungsnummer||'—')}</b></span><span>${escapeHtml(r.kunde||'—')}</span><span>${escapeHtml(r.beschreibung||'—')}</span><span><b>${euro(r.bruttobetrag||0)}</b></span><span>${r.quelldatei?`<a href="${escapeHtml(r.quelldatei)}" target="_blank" rel="noopener">PDF</a>`:'—'}</span></div>`).join('')}</div>`:'<div class="empty-box">Keine passende Rechnung gefunden.</div>';
+  }catch(err){invoiceList.innerHTML=`<p class="notice">Rechnungsdaten konnten nicht geladen werden: ${escapeHtml(err.message)}</p>`}
+}
+
+
+async function syncOfferCustomers(rows){
+  if(!Array.isArray(rows)||!rows.length)return;
+  try{
+    const {data:existing,error}=await db.from('customers').select('*');
+    if(error)throw error;
+    const customers=Array.isArray(existing)?existing:[];
+    for(const offer of rows){
+      const k=offer.kundendaten||{};
+      const number=String(k.kundennummer||'').trim();
+      const email=String(k.email||'').trim().toLowerCase();
+      const company=String(k.firma||'').trim();
+      const first=String(k.vorname||'').trim();
+      const last=String(k.nachname||'').trim();
+      const name=normalizeCustomerText([first,last].filter(Boolean).join(' '));
+      if(!number&&!email&&!company&&!name)continue;
+      let match=customers.find(c=>number&&String(c.kundennummer||'').trim()===number);
+      if(!match&&email)match=customers.find(c=>String(c.email||'').trim().toLowerCase()===email);
+      if(!match)match=customers.find(c=>{
+        const cName=normalizeCustomerText([c.vorname,c.nachname].filter(Boolean).join(' '));
+        return company && normalizeCustomerText(c.firma)===normalizeCustomerText(company) || (name && cName===name);
+      });
+      const payload={
+        kundennummer:number||null,firma:company||null,vorname:first||null,nachname:last||null,
+        strasse:String(k.strasse||'').trim()||null,hausnummer:String(k.hausnummer||'').trim()||null,
+        plz:String(k.plz||'').trim()||null,ort:String(k.ort||'').trim()||null,land:String(k.land||'Deutschland').trim()||'Deutschland',
+        telefon:String(k.telefon||'').trim()||null,email:String(k.email||'').trim()||null,updated_at:new Date().toISOString()
+      };
+      if(match){
+        const patch={updated_at:payload.updated_at};
+        for(const key of ['kundennummer','firma','vorname','nachname','strasse','hausnummer','plz','ort','land','telefon','email']){
+          if(!match[key] && payload[key])patch[key]=payload[key];
+        }
+        if(Object.keys(patch).length>1){
+          const {error:updateError}=await db.from('customers').update(patch).eq('id',match.id);
+          if(updateError)console.warn('Angebotskunde konnte nicht ergänzt werden:',updateError.message);
+          else Object.assign(match,patch);
+        }
+      }else{
+        const {data:newCustomer,error:insertError}=await db.from('customers').insert(payload).select().single();
+        if(insertError)console.warn('Angebotskunde konnte nicht angelegt werden:',insertError.message);
+        else if(newCustomer){customers.push(newCustomer);match=newCustomer;}
+      }
+      if(match){
+        offer.customer_id=match.id;
+        const offerNumber=String(offer.angebotsnummer||offer.angebotsnr||'').trim();
+        if(offerNumber){
+          const {data:savedOffer}=await db.from('offers').select('id').eq('angebotsnummer',offerNumber).maybeSingle();
+          if(savedOffer?.id){
+            const {error:updateOfferError}=await db.from('offers').update({customer_id:match.id}).eq('id',savedOffer.id);
+            if(updateOfferError)console.warn('Angebot konnte nicht mit Kunde verknüpft werden:',updateOfferError.message);
+          }
+        }
+      }
+    }
+  }catch(err){
+    console.warn('Kundenübernahme aus Angeboten fehlgeschlagen:',err.message);
+  }
+}
+
+function normalizeOfferDate(value){
+  if(value===null||value===undefined||value==='')return null;
+  const s=String(value).trim();
+  let m=s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if(m)return `${m[3]}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;
+  m=s.match(/^(\d{4})[\/.](\d{1,2})[\/.](\d{1,2})$/);
+  if(m)return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;
+  const d=new Date(s);
+  if(!Number.isNaN(d.getTime()))return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return null;
+}
+
+async function syncOffersToSupabase(rows){
+  if(!Array.isArray(rows)||!rows.length)return [];
+
+  // Google Drive kann bei einem manuellen/erneuten Import dieselbe
+  // Angebotsnummer mehrfach liefern. Supabase/Postgres lehnt ein UPSERT
+  // mit demselben Conflict-Key innerhalb eines Statements ab.
+  // Deshalb wird VOR dem UPSERT eindeutig nach Angebotsnummer dedupliziert.
+  const uniqueMap=new Map();
+  let duplicateCount=0;
+
+  for(const r of rows){
+    const number=String(r?.angebotsnummer||r?.angebotsnr||'').trim();
+    if(!number)continue;
+
+    const normalized={
+      ...r,
+      angebotsnummer:number
+    };
+
+    if(uniqueMap.has(number)){
+      duplicateCount++;
+      const previous=uniqueMap.get(number);
+      // Den Datensatz mit den vollständigeren Angaben behalten.
+      const score=(x)=>[
+        x?.betrag,
+        x?.angebotsdatum||x?.datum||x?.date,
+        x?.kunde||x?.kundenname,
+        x?.firma,
+        x?.beschreibung,
+        x?.dateiId||x?.drive_file_id,
+        x?.dateiUrl||x?.drive_url
+      ].filter(v=>v!==undefined&&v!==null&&String(v).trim()!=='').length;
+      if(score(normalized)>=score(previous))uniqueMap.set(number,normalized);
+    }else{
+      uniqueMap.set(number,normalized);
+    }
+  }
+
+  const cleanRows=[...uniqueMap.values()];
+  if(!cleanRows.length)return [];
+
+  const numbers=cleanRows.map(r=>r.angebotsnummer);
+  const {data:saved,error}=await db.from('offers').select('*').in('angebotsnummer',numbers);
+  if(error)throw error;
+  const savedMap=new Map((saved||[]).map(x=>[String(x.angebotsnummer||'').trim(),x]));
+
+  const payload=cleanRows.map(r=>{
+    const number=String(r.angebotsnummer||'').trim();
+    const old=savedMap.get(number);
+    return {
+      angebotsnummer:number,
+      angebotsdatum:normalizeOfferDate(r.angebotsdatum||r.datum||r.date),
+      firma:r.firma||'',
+      kundenname:r.kunde||r.kundenname||'',
+      beschreibung:r.beschreibung||'',
+      betrag:Number(r.betrag||0),
+      status:old?.status||r.status||'Offen / In Bearbeitung',
+      dateiname:r.dateiname||'',
+      drive_file_id:r.dateiId||r.drive_file_id||'',
+      drive_url:r.dateiUrl||r.drive_url||''
+    };
+  });
+
+  const {error:upsertError}=await db.from('offers').upsert(payload,{onConflict:'angebotsnummer'});
+  if(upsertError)throw upsertError;
+
+  if(duplicateCount){
+    console.info(`Angebote: ${duplicateCount} doppelte Angebotsnummer(n) beim Import bereinigt.`);
+  }
+  return payload;
+}
+
+async function loadOffers(forceRefresh=false){
+  if(!offerList)return;
+  offerList.innerHTML=forceRefresh?'<p>Angebote werden aktualisiert...</p>':'<p>Gespeicherte Angebote werden geladen...</p>';
+  try{
+    // Normal: ausschließlich Supabase verwenden. Dadurch wird nicht bei jedem Öffnen
+    // erneut jedes PDF aus Google Drive gelesen.
+    const {data:saved,error:savedError}=await db.from('offers').select('*').order('angebotsdatum',{ascending:false});
+    if(savedError)throw savedError;
+    let rows=Array.isArray(saved)?saved.map(x=>({
+      ...x,
+      angebotsnummer:x.angebotsnummer,
+      angebotsdatum:x.angebotsdatum,
+      datum:x.angebotsdatum,
+      kunde:x.kundenname,
+      dateiUrl:x.drive_url
+    })):[];
+
+    // Beim ersten Start dieser neuen Angebotsversion einmalig aus Google Drive importieren.
+    // Danach kommt das normale Öffnen ausschließlich aus Supabase.
+    // Der Import-Schlüssel verhindert, dass bei jedem Seitenaufruf erneut alle PDFs gelesen werden.
+    let initialSyncDone=false;
+    try{ initialSyncDone=localStorage.getItem(OFFERS_INITIAL_SYNC_KEY)==='1'; }catch(e){}
+    // Falls die Datenbank leer ist oder diese Version noch nicht initial importiert hat,
+    // einmalig alle Angebote aus Google Drive übernehmen.
+    const shouldSync=forceRefresh || !initialSyncDone || rows.length===0;
+    if(shouldSync){
+      const result=await googleApiJsonp(ANGEBOTE_API_URL,{action:'angebote'});
+      if(result.ok===false)throw new Error(result.error||'Angebotsdaten konnten nicht geladen werden.');
+      const driveRows=Array.isArray(result.angebote)?result.angebote:[];
+      if(driveRows.length){
+        await syncOffersToSupabase(driveRows);
+        // Kundenübernahme läuft bewusst im Hintergrund und darf den Angebotsimport nicht blockieren.
+        syncOfferCustomers(driveRows).catch(err=>console.warn('Kundenübernahme aus Angeboten:',err.message));
+        const {data:fresh,error:freshError}=await db.from('offers').select('*').order('angebotsdatum',{ascending:false});
+        if(freshError)throw freshError;
+        rows=Array.isArray(fresh)?fresh.map(x=>({...x,datum:x.angebotsdatum,kunde:x.kundenname,dateiUrl:x.drive_url})):[];
+        // Nur als erfolgreich initialisiert markieren, wenn mindestens ein Angebot importiert wurde.
+        if(!forceRefresh && driveRows.length>0){
+          try{ localStorage.setItem(OFFERS_INITIAL_SYNC_KEY,'1'); }catch(e){}
+        }
+      }
+    }
+
+    currentOffers=rows;
+    renderOffers();
+  }catch(err){
+    currentOffers=[];
+    offerList.innerHTML=`<p class="notice">Angebotsdaten konnten nicht geladen werden: ${escapeHtml(err.message)}</p>`;
+    updateOfferTotals([]);
+  }finally{
+    if(refreshOffersBtn)refreshOffersBtn.disabled=false;
+  }
+}
+
+
 function showCustomerMsg(message,isError=false){
   if(!customerMsg)return;
   customerMsg.textContent=message;
@@ -1118,8 +1329,7 @@ function renderCustomers(){
 
 async function loadCustomers(){
   if(!customerList)return;
-  customerList.innerHTML='<p>Kunden werden geladen und mit Angeboten/Rechnungen abgeglichen...</p>';
-  try{await syncCustomersFromSources();}catch(err){console.warn('Kundenquellen:',err.message);}
+  customerList.innerHTML='<p>Kunden werden geladen...</p>';
   const {data,error}=await db.from('customers').select('*').order('nachname',{ascending:true}).order('firma',{ascending:true});
   if(error){
     currentCustomers=[];
@@ -1318,11 +1528,6 @@ offerList?.addEventListener('change',e=>{
 });
 
 customerSearch?.addEventListener('input',renderCustomers);
-document.getElementById('refreshCustomersBtn')?.addEventListener('click',async()=>{
-  const btn=document.getElementById('refreshCustomersBtn');
-  if(btn)btn.disabled=true;
-  try{await loadCustomers();}finally{if(btn)btn.disabled=false;}
-});
 customerForm?.addEventListener('submit',saveCustomer);
 cancelCustomerBtn?.addEventListener('click',resetCustomerForm);
 customerList?.addEventListener('click',e=>{
