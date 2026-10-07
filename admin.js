@@ -744,9 +744,12 @@ async function loadReceipts(){
       </div>
     </div>`).join('');
 
-  // Google-Sheets-Synchronisierung läuft erst nach dem Aufbau der Belegliste.
-  // Fehler beim Sync dürfen die App niemals blockieren.
-  syncAllReceiptsToGoogle(rows);
+  // WICHTIG: Bereits geladene Belege werden hier NICHT erneut gesammelt
+  // an Google Sheets gesendet. Das würde bei jedem Dashboard-Aufruf für
+  // alle vorhandenen Belege parallele Apps-Script-Aufrufe erzeugen und
+  // kann zu "Too many simultaneous calls: Tabellen" führen.
+  // Ein neu gespeicherter Beleg wird weiter direkt über syncReceiptToGoogle()
+  // synchronisiert.
 }
 
 function showOcrMsg(message,error=false){
