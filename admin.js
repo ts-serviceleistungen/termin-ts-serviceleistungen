@@ -543,9 +543,8 @@ async function loadFinancials(){
   // First load the invoice API. A failure must NOT prevent the expense side
   // of the financial overview from being rendered.
   try{
-    const response=await fetch(`${RECHNUNGS_API_URL}?year=${year}&v=${Date.now()}`,{cache:'no-store'});
-    const result=await response.json().catch(()=>({}));
-    if(response.ok && result.ok!==false){
+    const result=await googleApiJsonp(RECHNUNGS_API_URL,{year:year});
+    if(result && result.ok!==false){
       invoiceYear=Number(result.bruttoGesamtJahr ?? result.bruttoGesamt ?? 0)||0;
       if(Array.isArray(result.monatlich)){
         result.monatlich.forEach((v,i)=>{if(i<12) monthlyInvoices[i]=Number(v)||0;});
