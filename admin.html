@@ -1,6 +1,96 @@
-<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>T.S. Serviceleistungen – Administration</title><link rel="stylesheet" href="admin.css?v=20261005"><link rel="manifest" href="./manifest.json">
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>T.S. Serviceleistungen – Administration</title><link rel="stylesheet" href="admin.css?v=20261007-mobile1"><link rel="manifest" href="./manifest.json">
 <link rel="apple-touch-icon" href="./assets/icon-192.png">
 <meta name="theme-color" content="#b88918">
+
+<style id="ts-mobile-layout-fix">
+/* T.S. Serviceleistungen – mobile admin layout */
+@media (max-width: 700px) {
+  html, body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden !important;
+  }
+
+  body {
+    min-width: 0 !important;
+  }
+
+  main,
+  #dash,
+  #dashboardHome {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  /* BMW-Bild auf dem Handy kompakt halten */
+  .admin-hero {
+    width: 100% !important;
+    height: 155px !important;
+    min-height: 155px !important;
+    max-height: 155px !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .hero-reference-image {
+    display: block !important;
+    width: 100% !important;
+    height: 155px !important;
+    max-width: 100% !important;
+    object-fit: cover !important;
+    object-position: center center !important;
+  }
+
+  /* Aktualisieren nicht mehr rechts aus dem Bildschirm herausziehen */
+  .refresh-floating {
+    position: static !important;
+    display: block !important;
+    width: calc(100% - 32px) !important;
+    max-width: 360px !important;
+    min-height: 48px !important;
+    margin: 12px 16px 8px !important;
+    box-sizing: border-box !important;
+    transform: none !important;
+  }
+
+  .reference-page-title {
+    width: calc(100% - 32px) !important;
+    margin-left: 16px !important;
+    margin-right: 16px !important;
+    box-sizing: border-box !important;
+  }
+
+  .menu-grid {
+    width: calc(100% - 32px) !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    margin-left: 16px !important;
+    margin-right: 16px !important;
+    box-sizing: border-box !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  .menu-card {
+    width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Dashboard-Karten ebenfalls nicht über den rechten Rand hinausragen */
+  .stats,
+  .finance-cards,
+  .panel,
+  .section-toolbar,
+  .notice {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+}
+</style>
+
 </head><body>
 
 <main>
