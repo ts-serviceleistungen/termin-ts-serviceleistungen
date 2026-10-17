@@ -249,14 +249,15 @@ async function deleteRequest(id){
       const paths=photos.map(p=>p.storage_path).filter(Boolean);
       if(paths.length){
         const {error:storageError}=await db.storage.from('vehicle-photos').remove(paths);
-        // Falls für den Storage noch keine DELETE-Policy vorhanden ist,
-        // darf das Löschen der Anfrage trotzdem nicht blockiert werden.
-        if(storageError)console.warn('Fahrzeugfotos konnten nicht aus dem Storage gelöscht werden:',storageError.message);
+        if(storageError)throw storageError;
       }
     }
 
     const {error:photosError}=await db.from('request_photos').delete().eq('request_id',id);
     if(photosError)throw photosError;
+
+    const {error:blocksError}=await db.from('request_booking_blocks').delete().eq('request_id',id);
+    if(blocksError)throw blocksError;
 
     const {error}=await db.from('requests').delete().eq('id',id);
     if(error)throw error;
