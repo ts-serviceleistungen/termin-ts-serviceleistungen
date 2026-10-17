@@ -8,7 +8,7 @@
 <link rel="apple-touch-icon" href="./assets/icon-192.png">
 <meta name="description" content="T.S. Serviceleistungen – Anfrage">
 <title>T.S. Serviceleistungen – Anfrage</title>
-<link rel="stylesheet" href="request.css?v=20261005">
+<link rel="stylesheet" href="request.css?v=20261017-12">
 </head>
 <body>
 <header class="topbar">
@@ -83,18 +83,18 @@
       <h3>Kontaktdaten</h3>
       <div class="field-grid"><label>Vorname<input id="first_name" required></label><label>Nachname<input id="last_name" required></label><label>Telefon<input id="phone" required></label><label>E-Mail<input id="email" type="email" required></label></div>
       <label>Nachricht<textarea id="message" placeholder="Weitere Informationen, Wünsche oder Besonderheiten"></textarea></label>
-      <label class="upload">Fotos<input id="photos" type="file" accept="image/*" multiple><small>Optional – mehrere Bilder möglich</small></label>
-      <label class="privacy"><input id="privacy_consent" type="checkbox" required> Ich habe die <a href="datenschutz.html" target="_blank" rel="noopener">Datenschutzhinweise</a> gelesen und zur Kenntnis genommen.</label>
+      <label class="upload">Fotos<input id="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple><small>Optional – JPG, PNG oder WebP, maximal 8 MB pro Bild</small></label>
+      <label class="privacy"><input id="privacy_consent" type="checkbox" required> Ich habe die <a href="datenschutz.html" target="_blank" rel="noopener">Datenschutzhinweise</a> zur Kenntnis genommen.</label>
       <button class="submit-btn" type="submit">Anfrage absenden <span>→</span></button>
       <p id="msg" class="notice hidden"></p>
     </form>
   </section>
 </main>
 
-<footer><span>© T.S. Serviceleistungen</span><a href="datenschutz.html">Datenschutz</a><a href="admin.html">Admin Login</a></footer>
+<footer><span>© T.S. Serviceleistungen</span><a href="https://ts-serviceleistungen.github.io/ts-serviceleistungen-homepage/impressum.html" target="_blank" rel="noopener">Impressum</a><a href="datenschutz.html">Datenschutz Online-Anfrage</a><a href="https://ts-serviceleistungen.github.io/ts-serviceleistungen-homepage/datenschutz.html" target="_blank" rel="noopener">Datenschutz Homepage</a><a href="admin.html">Admin Login</a></footer>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
-<script src="app.js?v=20261005"></script>
-<script src="./pwa.js?v=20261005-3"></script>
+<script src="app.js?v=20261017-12"></script>
+<script src="./pwa.js?v=20261017-12"></script>
 </body>
 </html>
