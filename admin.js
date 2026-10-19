@@ -22,6 +22,7 @@ const receiptsView = document.getElementById('receiptsView');
 const invoicesView = document.getElementById('invoicesView');
 const offersView = document.getElementById('offersView');
 const customersView = document.getElementById('customersView');
+const existingCustomersView = document.getElementById('existingCustomersView');
 const customerList = document.getElementById('customerList');
 const customerSearch = document.getElementById('customerSearch');
 const customerForm = document.getElementById('customerForm');
@@ -1265,6 +1266,7 @@ async function syncOffersToSupabase(rows){
       beschreibung:r.beschreibung||'',
       betrag:Number(r.betrag||0),
       status:old?.status||r.status||'Offen / In Bearbeitung',
+      customer_id:old?.customer_id||null,
       dateiname:r.dateiname||'',
       drive_file_id:r.dateiId||r.drive_file_id||'',
       drive_url:r.dateiUrl||r.drive_url||''
@@ -1423,6 +1425,43 @@ async function loadCustomers(){
   renderCustomers();
 }
 
+async function linkExistingOffersToCustomers(){
+  if(!currentOffers.length||!currentCustomers.length)return;
+  const norm=value=>normalizeCustomerText(value||'');
+  for(const offer of currentOffers){
+    if(offer.customer_id)continue;
+    const offerName=norm(offer.kunde||offer.kundenname);
+    if(!offerName)continue;
+    const matches=currentCustomers.filter(c=>{
+      const company=norm(c.firma);
+      const person=norm([c.vorname,c.nachname].filter(Boolean).join(' '));
+      return (company&&company===offerName)||(person&&person===offerName);
+    });
+    // Nur bei genau einem eindeutigen Treffer verknüpfen, um Fehlzuordnungen zu vermeiden.
+    if(matches.length!==1)continue;
+    const customer=matches[0];
+    const {error}=await db.from('offers').update({customer_id:customer.id}).eq('angebotsnummer',String(offer.angebotsnummer||'').trim());
+    if(error){
+      console.warn('Angebot konnte nicht dem Bestandskunden zugeordnet werden:',error.message);
+      continue;
+    }
+    offer.customer_id=customer.id;
+  }
+}
+
+async function loadBestandskunden(){
+  if(customerList)customerList.innerHTML='<p>Kunden, Rechnungen und Angebote werden geladen...</p>';
+  try{
+    // Erst die beiden Dokumentenlisten laden, damit die Kundenansicht aktuelle Daten verwendet.
+    await Promise.all([loadInvoices(),loadOffers(false)]);
+    await loadCustomers();
+    await linkExistingOffersToCustomers();
+    renderCustomers();
+  }catch(err){
+    if(customerList)customerList.innerHTML=`<p class="notice">Bestandskunden konnten nicht vollständig geladen werden: ${escapeHtml(err.message)}</p>`;
+  }
+}
+
 function editCustomer(id){
   const c=currentCustomers.find(x=>x.id===id);
   if(!c)return;
@@ -1538,6 +1577,7 @@ async function saveOfferStatus(offer, status){
     beschreibung:offer.beschreibung||'',
     betrag:Number(offer.betrag||0),
     status,
+    customer_id:offer.customer_id||null,
     dateiname:offer.dateiname||'',
     drive_file_id:offer.dateiId||offer.drive_file_id||'',
     drive_url:offer.dateiUrl||offer.drive_url||''
@@ -1573,6 +1613,7 @@ function showView(view){
   if(invoicesView)invoicesView.classList.toggle('hidden',view!=='invoices');
   if(offersView)offersView.classList.toggle('hidden',view!=='offers');
   if(customersView)customersView.classList.toggle('hidden',view!=='customers');
+  if(existingCustomersView)existingCustomersView.classList.toggle('hidden',view!=='existingCustomers');
   document.querySelectorAll('[data-back-dashboard]').forEach(btn=>btn.classList.toggle('hidden',view==='dashboard'));
 
   if(pageTitle && view==='dashboard')pageTitle.textContent='Dashboard';
@@ -1580,7 +1621,8 @@ function showView(view){
   if(pageTitle && view==='receipts')pageTitle.textContent='Belege';
   if(pageTitle && view==='invoices')pageTitle.textContent='Rechnungen';
   if(pageTitle && view==='offers')pageTitle.textContent='Angebote';
-  if(pageTitle && view==='customers')pageTitle.textContent='Kunden & Firmen';
+  if(pageTitle && view==='customers')pageTitle.textContent='Kunden anlegen';
+  if(pageTitle && view==='existingCustomers')pageTitle.textContent='Bestandskunden';
 
   if(view==='requests')load();
   if(view==='receipts'){
@@ -1589,7 +1631,8 @@ function showView(view){
   }
   if(view==='invoices')loadInvoices();
   if(view==='offers')loadOffers(false);
-  if(view==='customers')loadCustomers();
+  if(view==='customers')resetCustomerForm();
+  if(view==='existingCustomers')loadBestandskunden();
 }
 
 document.querySelectorAll('[data-nav]').forEach(btn=>{
