@@ -1025,18 +1025,38 @@ function invoiceCustomerParts(value){
 function invoiceCustomerFromFilename(filename, invoiceNumber=''){
   let name=String(filename||'').trim();
   try{
-    if(/^https?:\\/\\//i.test(name)){
+    if(/^https?:\/\//i.test(name)){
       const url=new URL(name);
       name=decodeURIComponent(url.pathname.split('/').pop()||'');
     }else{
-      name=decodeURIComponent(name.split(/[\\\\/]/).pop()||name);
+      name=decodeURIComponent(name.split(/[\\/]/).pop()||name);
     }
   }catch(e){
-    name=String(filename||'').split(/[\\\\/]/).pop()||'';
+    name=String(filename||'').split(/[\\/]/).pop()||'';
   }
-  name=name.replace(/\\.pdf$/i,'').trim();
+  name=name.replace(/\.pdf$/i,'').trim();
   const number=String(invoiceNumber||'').trim();
-  if(number)name=name.replace(new RegExp('^'+number.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\async function syncInvoiceCustomers(rows){')+'[\\s_-]*','i'),'');
+  if(number && name.toLowerCase().startsWith(number.toLowerCase())){
+    name=name.slice(number.length);
+  }
+  name=name.replace(/^(?:RE|RECHNUNG|R|INVOICE)[-_ ]?\d{4,}[-_ ]*/i,'');
+  name=name.replace(/^[\s_-]+|[\s_-]+$/g,'').replace(/_+/g,' ').replace(/\s+/g,' ').trim();
+  return name && !/^TEMP_/i.test(name) ? name : '';
+}
+
+function invoiceSourceLink(invoice){
+  const candidates=[invoice?.pdf_url,invoice?.drive_url,invoice?.url,invoice?.quelldatei];
+  const source=candidates.find(value=>String(value||'').trim());
+  if(!source)return null;
+  const value=String(source).trim();
+  if(/^https?:\/\//i.test(value))return {href:value,label:'PDF'};
+  if(/^[A-Za-z0-9_-]{25,}$/.test(value))return {href:'https://drive.google.com/open?id='+encodeURIComponent(value),label:'PDF'};
+  // Alte API-Versionen liefern manchmal nur den Dateinamen. Dann Drive-Suche öffnen,
+  // statt einen ungültigen relativen GitHub-Pages-Link zu erzeugen.
+  return {href:'https://drive.google.com/drive/search?q='+encodeURIComponent(value),label:'In Drive suchen'};
+}
+
+async function syncInvoiceCustomers(rows){')+'[\\s_-]*','i'),'');
   name=name.replace(/^(?:RE|RECHNUNG|R|INVOICE)[-_ ]?\\d{4,}[-_ ]*/i,'');
   name=name.replace(/^[\\s_-]+|[\\s_-]+$/g,'').replace(/[_]+/g,' ').replace(/\\s+/g,' ').trim();
   return name && !/^TEMP_/i.test(name) ? name : '';
