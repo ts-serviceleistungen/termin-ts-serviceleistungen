@@ -138,7 +138,12 @@
         <label>Suche<input id="offerSearch" class="search" placeholder="Kunde, Angebotsnummer oder Beschreibung suchen…"></label>
         <label>Status<select id="offerStatusFilter"><option value="">Alle Status</option><option value="Offen / In Bearbeitung">Offen / In Bearbeitung</option><option value="Angenommen">Angenommen</option><option value="Abgelehnt">Abgelehnt</option></select></label>
       </div>
-      <p class="notice">Angenommene Angebote werden hier als mögliche Einnahmen angezeigt. Sie werden ers  <section id="customersView" class="hidden">
+      <p class="notice">Angenommene Angebote werden hier als mögliche Einnahmen angezeigt. Sie werden erst nach Bestätigung als Einnahmen berücksichtigt.</p>
+      <div id="offerList"></div>
+    </section>
+  </section>
+
+  <section id="customersView" class="hidden">
     <div class="section-toolbar"><button type="button" class="back-dashboard" data-back-dashboard>← Dashboard</button></div>
     <section class="panel">
       <div class="section-title"><div><span class="eyebrow">KUNDENSTAMM</span><h2>Neuen Kunden anlegen</h2><p>Hier werden neue Kunden erfasst oder bestehende Kundendaten gezielt bearbeitet.</p></div></div>
@@ -177,10 +182,6 @@
     </section>
   </section>
 
-rch" placeholder="Kunde, Firma, E-Mail oder Kundennummer suchen…">
-      <div id="customerList"><p>Kunden werden geladen...</p></div>
-    </section>
-  </section>
 
   <section id="receiptsView" class="hidden"><div class="section-toolbar"><button type="button" class="back-dashboard" data-back-dashboard>← Dashboard</button></div><section class="panel"><div class="section-title"><div><span class="eyebrow">AUSGABEN</span><h2>Belege</h2><p>Belege erfassen und Ausgaben verwalten</p></div></div><form id="receiptForm" class="receipt-form"><label>Belegfoto<input id="receiptImage" type="file" accept="image/*" capture="environment" required></label><button type="button" id="ocrReceipt" class="gold-btn">🔎 Beleg automatisch erkennen</button><p id="ocrMsg" class="notice hidden"></p><div class="field-grid"><label>Datum<input id="receiptDate" type="date" required></label><label>Händler / Geschäft<input id="receiptMerchant" type="text"></label><label>Belegnummer<input id="receiptNumber" type="text"></label><label>Bruttobetrag (€)<input id="receiptGross" type="number" min="0" step="0.01" required></label><label>Kategorie<select id="receiptCategory"><option>KFZ</option><option>Kraftstoff</option><option>Ersatzteile</option><option>Betriebsmittel</option><option>Büro</option><option>Sonstiges</option></select></label><label>Zahlungsart<select id="receiptPayment"><option>Bar</option><option>EC/Karte</option><option>Überweisung</option><option>Sonstiges</option></select></label></div><label>Beschreibung<input id="receiptDescription" type="text"></label><p id="receiptMsg" class="notice hidden"></p><button id="saveReceiptBtn" class="gold-btn" type="submit">Beleg speichern</button></form></section><section class="panel"><div class="panel-head"><b>Alle Belege</b></div><div id="receiptList"></div></section></section>
 </section></main>
