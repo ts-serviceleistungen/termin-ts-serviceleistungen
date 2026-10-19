@@ -1056,24 +1056,6 @@ function invoiceSourceLink(invoice){
   return {href:'https://drive.google.com/drive/search?q='+encodeURIComponent(value),label:'In Drive suchen'};
 }
 
-async function syncInvoiceCustomers(rows){')+'[\\s_-]*','i'),'');
-  name=name.replace(/^(?:RE|RECHNUNG|R|INVOICE)[-_ ]?\\d{4,}[-_ ]*/i,'');
-  name=name.replace(/^[\\s_-]+|[\\s_-]+$/g,'').replace(/[_]+/g,' ').replace(/\\s+/g,' ').trim();
-  return name && !/^TEMP_/i.test(name) ? name : '';
-}
-
-function invoiceSourceLink(invoice){
-  const candidates=[invoice?.pdf_url,invoice?.drive_url,invoice?.url,invoice?.quelldatei];
-  const source=candidates.find(value=>String(value||'').trim());
-  if(!source)return null;
-  const value=String(source).trim();
-  if(/^https?:\\/\\//i.test(value))return {href:value,label:'PDF'};
-  if(/^[A-Za-z0-9_-]{25,}$/.test(value))return {href:'https://drive.google.com/open?id='+encodeURIComponent(value),label:'PDF'};
-  // Legacy API liefert bei älteren Rechnungen nur den Dateinamen.
-  // Öffnet die Google-Drive-Suche statt eines nicht vorhandenen GitHub-Pages-Pfads.
-  return {href:'https://drive.google.com/drive/search?q='+encodeURIComponent(value),label:'In Drive suchen'};
-}
-
 async function syncInvoiceCustomers(rows){
   if(!Array.isArray(rows)||!rows.length)return;
   try{
