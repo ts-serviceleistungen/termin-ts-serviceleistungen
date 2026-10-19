@@ -1465,6 +1465,7 @@ async function loadBestandskunden(){
 function editCustomer(id){
   const c=currentCustomers.find(x=>x.id===id);
   if(!c)return;
+  showView('customers');
   customerId.value=c.id||'';
   customerNumber.value=c.kundennummer||'';
   customerCompany.value=c.firma||'';
