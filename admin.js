@@ -1022,6 +1022,38 @@ function invoiceCustomerParts(value){
   return {firma:raw,vorname:'',nachname:''};
 }
 
+function invoiceCustomerFromFilename(filename, invoiceNumber=''){
+  let name=String(filename||'').trim();
+  try{
+    if(/^https?:\\/\\//i.test(name)){
+      const url=new URL(name);
+      name=decodeURIComponent(url.pathname.split('/').pop()||'');
+    }else{
+      name=decodeURIComponent(name.split(/[\\\\/]/).pop()||name);
+    }
+  }catch(e){
+    name=String(filename||'').split(/[\\\\/]/).pop()||'';
+  }
+  name=name.replace(/\\.pdf$/i,'').trim();
+  const number=String(invoiceNumber||'').trim();
+  if(number)name=name.replace(new RegExp('^'+number.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\async function syncInvoiceCustomers(rows){')+'[\\s_-]*','i'),'');
+  name=name.replace(/^(?:RE|RECHNUNG|R|INVOICE)[-_ ]?\\d{4,}[-_ ]*/i,'');
+  name=name.replace(/^[\\s_-]+|[\\s_-]+$/g,'').replace(/[_]+/g,' ').replace(/\\s+/g,' ').trim();
+  return name && !/^TEMP_/i.test(name) ? name : '';
+}
+
+function invoiceSourceLink(invoice){
+  const candidates=[invoice?.pdf_url,invoice?.drive_url,invoice?.url,invoice?.quelldatei];
+  const source=candidates.find(value=>String(value||'').trim());
+  if(!source)return null;
+  const value=String(source).trim();
+  if(/^https?:\\/\\//i.test(value))return {href:value,label:'PDF'};
+  if(/^[A-Za-z0-9_-]{25,}$/.test(value))return {href:'https://drive.google.com/open?id='+encodeURIComponent(value),label:'PDF'};
+  // Legacy API liefert bei älteren Rechnungen nur den Dateinamen.
+  // Öffnet die Google-Drive-Suche statt eines nicht vorhandenen GitHub-Pages-Pfads.
+  return {href:'https://drive.google.com/drive/search?q='+encodeURIComponent(value),label:'In Drive suchen'};
+}
+
 async function syncInvoiceCustomers(rows){
   if(!Array.isArray(rows)||!rows.length)return;
   try{
@@ -1077,7 +1109,13 @@ async function loadInvoices(){
   try{
     const result=await googleApiJsonp(RECHNUNGS_API_URL,{year:new Date().getFullYear()});
     if(result.ok===false)throw new Error(result.error||'Rechnungsdaten konnten nicht geladen werden.');
-    const rows=Array.isArray(result.rechnungen)?result.rechnungen:[];
+    const rows=Array.isArray(result.rechnungen)?result.rechnungen.map(invoice=>{
+      const row={...invoice};
+      if(!String(row.kunde||'').trim() || String(row.kunde).trim()==='—'){
+        row.kunde=invoiceCustomerFromFilename(row.quelldatei||row.pdf_url||row.drive_url,row.rechnungsnummer)||row.kunde||'';
+      }
+      return row;
+    }):[];
     const year=Number(result.bruttoGesamtJahr??result.bruttoGesamt??0);
     const month=Number(result.bruttoGesamtMonat??0);
     if(invoiceTotal)invoiceTotal.textContent=euro(year);
@@ -1090,7 +1128,7 @@ async function loadInvoices(){
 
     const q=(invoiceSearch?.value||'').trim().toLowerCase();
     const filtered=rows.filter(r=>[r.rechnungsnummer,r.kunde,r.beschreibung,r.rechnungsdatum].join(' ').toLowerCase().includes(q));
-    invoiceList.innerHTML=filtered.length?`<div class="invoice-table"><div class="invoice-row invoice-head"><span>Datum</span><span>Rechnungsnr.</span><span>Kunde</span><span>Beschreibung</span><span>Brutto</span><span>Quelle</span></div>${filtered.map(r=>`<div class="invoice-row"><span>${escapeHtml(r.rechnungsdatum||'—')}</span><span><b>${escapeHtml(r.rechnungsnummer||'—')}</b></span><span>${escapeHtml(r.kunde||'—')}</span><span>${escapeHtml(r.beschreibung||'—')}</span><span><b>${euro(r.bruttobetrag||0)}</b></span><span>${r.quelldatei?`<a href="${escapeHtml(r.quelldatei)}" target="_blank" rel="noopener">PDF</a>`:'—'}</span></div>`).join('')}</div>`:'<div class="empty-box">Keine passende Rechnung gefunden.</div>';
+    invoiceList.innerHTML=filtered.length?`<div class="invoice-table"><div class="invoice-row invoice-head"><span>Datum</span><span>Rechnungsnr.</span><span>Kunde</span><span>Beschreibung</span><span>Brutto</span><span>Quelle</span></div>${filtered.map(r=>{const source=invoiceSourceLink(r);return `<div class="invoice-row"><span>${escapeHtml(r.rechnungsdatum||'—')}</span><span><b>${escapeHtml(r.rechnungsnummer||'—')}</b></span><span>${escapeHtml(r.kunde||'—')}</span><span>${escapeHtml(r.beschreibung||'—')}</span><span><b>${euro(r.bruttobetrag||0)}</b></span><span>${source?`<a href="${escapeHtml(source.href)}" target="_blank" rel="noopener">${escapeHtml(source.label)}</a>`:'—'}</span></div>`;}).join('')}</div>`:'<div class="empty-box">Keine passende Rechnung gefunden.</div>';
   }catch(err){invoiceList.innerHTML=`<p class="notice">Rechnungsdaten konnten nicht geladen werden: ${escapeHtml(err.message)}</p>`}
 }
 
