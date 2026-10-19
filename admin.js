@@ -166,6 +166,7 @@ function googleApiJsonp(baseUrl, params={}, timeoutMs=330000){
 const OFFERS_INITIAL_SYNC_KEY = 'ts_serviceleistungen_offers_initial_sync_v5';
 let currentOffers=[];
 let currentCustomers=[];
+let currentInvoices=[];
 let appointmentDate = new Date();
 let appointmentView = 'day';
 let calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -1118,6 +1119,7 @@ async function loadInvoices(){
       }
       return row;
     }):[];
+    currentInvoices=rows;
     const year=Number(result.bruttoGesamtJahr??result.bruttoGesamt??0);
     const month=Number(result.bruttoGesamtMonat??0);
     if(invoiceTotal)invoiceTotal.textContent=euro(year);
@@ -1368,22 +1370,45 @@ function renderCustomers(){
     customerList.innerHTML='<div class="empty-box">Keine Kunden gefunden.</div>';
     return;
   }
+  const norm=value=>normalizeCustomerText(value||'');
   customerList.innerHTML=rows.map(c=>{
     const name=[c.vorname,c.nachname].filter(Boolean).join(' ');
     const title=c.firma||name||'Ohne Namen';
     const address=[c.strasse,c.hausnummer].filter(Boolean).join(' ');
     const city=[c.plz,c.ort].filter(Boolean).join(' ');
-    return `<div class="customer-card" style="padding:16px;border:1px solid #e6dfcf;border-radius:16px;margin:10px 0;background:#fff">
-      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
-        <div><b>${escapeHtml(title)}</b><div style="margin-top:4px;color:#777">${escapeHtml(name&&c.firma?name+' · ':'')}${escapeHtml(c.kundennummer||'')}</div>
-        <div style="margin-top:8px;color:#555">${escapeHtml(address||'')}${address&&city?' · ':''}${escapeHtml(city||'')}</div>
-        <div style="margin-top:4px;color:#555">${escapeHtml(c.telefon||'')}${c.telefon&&c.email?' · ':''}${escapeHtml(c.email||'')}</div></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="small-btn" data-customer-edit="${escapeHtml(c.id)}">Bearbeiten</button><button type="button" class="small-btn" data-customer-delete="${escapeHtml(c.id)}">Löschen</button></div>
-      </div>
-    </div>`;
+    const customerNames=[norm(c.firma),norm(name)].filter(Boolean);
+    const relatedOffers=currentOffers.filter(o=>{
+      if(o.customer_id && o.customer_id===c.id)return true;
+      const offerName=norm(o.kunde||o.kundenname||o.firma);
+      return !!offerName && customerNames.includes(offerName);
+    });
+    const relatedInvoices=currentInvoices.filter(inv=>{
+      const invoiceName=norm(inv.kunde);
+      return !!invoiceName && customerNames.includes(invoiceName);
+    });
+    const offersHtml=relatedOffers.length?relatedOffers.map(o=>{
+      const number=o.angebotsnummer||o.angebotsnr||'—';
+      const date=o.datum||o.angebotsdatum||'—';
+      const pdf=o.dateiUrl||o.drive_url||o.driveUrl||'';
+      return '<div class="related-document"><span><b>'+escapeHtml(number)+'</b> · '+escapeHtml(date)+' · '+escapeHtml(o.status||'Offen / In Bearbeitung')+'</span><span><b>'+euro(o.betrag||0)+'</b> '+(pdf?'<a href="'+escapeHtml(pdf)+'" target="_blank" rel="noopener">PDF</a>':'')+'</span></div>';
+    }).join(''):'<p class="related-empty">Keine zugeordneten Angebote.</p>';
+    const invoicesHtml=relatedInvoices.length?relatedInvoices.map(inv=>{
+      const source=invoiceSourceLink(inv);
+      return '<div class="related-document"><span><b>'+escapeHtml(inv.rechnungsnummer||'—')+'</b> · '+escapeHtml(inv.rechnungsdatum||'—')+' · '+escapeHtml(inv.beschreibung||'Rechnung')+'</span><span><b>'+euro(inv.bruttobetrag||0)+'</b> '+(source?'<a href="'+escapeHtml(source.href)+'" target="_blank" rel="noopener">'+escapeHtml(source.label==='In Drive suchen'?'Drive':'PDF')+'</a>':'')+'</span></div>';
+    }).join(''):'<p class="related-empty">Keine zugeordneten Rechnungen.</p>';
+    return '<div class="customer-card" style="padding:16px;border:1px solid #e6dfcf;border-radius:16px;margin:10px 0;background:#fff">'+
+      '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">'+
+        '<div><b>'+escapeHtml(title)+'</b><div style="margin-top:4px;color:#777">'+escapeHtml(name&&c.firma?name+' · ':'')+escapeHtml(c.kundennummer||'')+'</div>'+
+        '<div style="margin-top:8px;color:#555">'+escapeHtml(address||'')+(address&&city?' · ':'')+escapeHtml(city||'')+'</div>'+
+        '<div style="margin-top:4px;color:#555">'+escapeHtml(c.telefon||'')+(c.telefon&&c.email?' · ':'')+escapeHtml(c.email||'')+'</div></div>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="small-btn" data-customer-edit="'+escapeHtml(c.id)+'">Bearbeiten</button><button type="button" class="small-btn" data-customer-delete="'+escapeHtml(c.id)+'">Löschen</button></div>'+
+      '</div>'+
+      '<div class="customer-documents" style="margin-top:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px">'+
+        '<div><h3 style="margin:0 0 8px">Angebote ('+relatedOffers.length+')</h3>'+offersHtml+'</div>'+
+        '<div><h3 style="margin:0 0 8px">Rechnungen ('+relatedInvoices.length+')</h3>'+invoicesHtml+'</div>'+
+      '</div></div>';
   }).join('');
 }
-
 async function loadCustomers(){
   if(!customerList)return;
   customerList.innerHTML='<p>Kunden werden geladen...</p>';
