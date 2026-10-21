@@ -1,4 +1,4 @@
-const CACHE = 'ts-serviceleistungen-pwa-v20261005-3';
+const CACHE = 'ts-serviceleistungen-pwa-v20261021-4';
 const SHELL = [
   './',
   './index.html',
@@ -55,7 +55,7 @@ self.addEventListener('fetch', event => {
           caches.open(CACHE).then(cache => cache.put(request, copy));
         }
         return response;
-      }).catch(() => caches.match('./index.html'));
-    })
+      }).catch(() => caches.match('./index.html'))
+    )
   );
 });
