@@ -1,5 +1,23 @@
 let deferredInstallPrompt = null;
 
+// Do not keep the installed app locked to portrait. Some installed PWA
+// sessions can retain an orientation lock after the manifest is updated.
+function unlockAppOrientation() {
+  try {
+    if (screen && screen.orientation && typeof screen.orientation.unlock === 'function') {
+      screen.orientation.unlock();
+    }
+  } catch (error) {
+    // Orientation APIs are not available in every browser/device context.
+  }
+}
+
+unlockAppOrientation();
+window.addEventListener('pageshow', unlockAppOrientation);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) unlockAppOrientation();
+});
+
 function setupPWAInstall() {
   const buttons = [...document.querySelectorAll('#installApp, .install-app')];
 
