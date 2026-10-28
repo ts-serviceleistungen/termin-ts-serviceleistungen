@@ -8,7 +8,7 @@
 <link rel="apple-touch-icon" href="./assets/icon-192.png">
 <meta name="description" content="T.S. Serviceleistungen – Anfrage">
 <title>T.S. Serviceleistungen – Anfrage</title>
-<link rel="stylesheet" href="request.css?v=20261017-14">
+<link rel="stylesheet" href="request.css?v=20261028-brandschutz1">
 </head>
 <body>
 <header class="topbar">
@@ -37,6 +37,7 @@
       <button class="service-card" onclick="pick('Ersatzteilanfrage')"><span class="service-icon">⚙️</span><span><b>Ersatzteilanfrage</b><small>Ersatzteile und Teilenummern</small></span><strong>→</strong></button>
       <button class="service-card" onclick="pick('Reifenanfrage')"><span class="service-icon">🛞</span><span><b>Reifenanfrage</b><small>Sommer · Winter · Ganzjahr</small></span><strong>→</strong></button>
       <button class="service-card" onclick="pick('Zubehörmontage')"><span class="service-icon">🔧</span><span><b>Zubehörmontage</b><small>Montage und technische Nachrüstung</small></span><strong>→</strong></button>
+      <button class="service-card service-wide" onclick="pick('Brandschutz-Anfrage')"><span class="service-icon">🧯</span><span><b>Brandschutz-Anfrage</b><small>Vermittlung externer Anbieter für Brandschutzhelfer-Ausbildung und Unterweisungen</small></span><strong>→</strong></button>
     </div>
   </section>
 
@@ -76,9 +77,24 @@
 
       <div id="parts" class="hidden"><h3>Details zur Anfrage</h3><label>Teil / Zubehör / Reifen<textarea id="details" placeholder="Was wird benötigt bzw. montiert?"></textarea></label><div class="field-grid two"><label>Anzahl<input id="quantity" type="number" min="1" value="1"></label><label>Reifenart<select id="tire_type"><option>Keine Angabe</option><option>Sommerreifen</option><option>Winterreifen</option><option>Ganzjahresreifen</option></select></label></div></div>
 
-      <h3>Wunschtermin</h3>
-      <div class="field-grid two"><label>Datum<input id="requested_date" type="date" required></label><label>Zeitraum<select id="requested_time"><option>Vormittags</option><option>08:00 – 10:00</option><option>10:00 – 12:00</option><option>13:00 – 15:00</option><option>15:00 – 17:00</option></select></label></div>
-      <div id="durationInfo" class="notice"></div>
+      <div id="fireBlock" class="hidden">
+        <h3>Angaben zur Brandschutz-Anfrage</h3>
+        <div class="field-grid">
+          <label>Unternehmen / Organisation<input id="fire_company" placeholder="Name des Unternehmens"></label>
+          <label>Anzahl der Teilnehmer<input id="fire_participants" type="number" min="1" placeholder="z. B. 8"></label>
+          <label>Gewünschte Leistung<select id="fire_training"><option value="">Bitte auswählen</option><option>Brandschutzhelfer-Ausbildung</option><option>Brandschutzunterweisung</option><option>Brandschutzhelfer-Ausbildung und Unterweisung</option><option>Beratung zur passenden Schulung / noch unklar</option><option>Sonstiges</option></select></label>
+          <label>Ort der Durchführung<input id="fire_location" placeholder="Ort / PLZ"></label>
+          <label>Gewünschter Zeitraum<input id="fire_period" placeholder="z. B. November 2026 oder flexibel"></label>
+        </div>
+        <label>Weitere Angaben<textarea id="fire_details" placeholder="Besondere Anforderungen, Schichtbetrieb oder gewünschte Inhalte"></textarea></label>
+        <p class="notice">T.S. Serviceleistungen vermittelt passende externe Anbieter. Die Schulung selbst wird durch den jeweiligen Anbieter durchgeführt.</p>
+      </div>
+
+      <div id="appointmentBlock">
+        <h3>Wunschtermin</h3>
+        <div class="field-grid two"><label>Datum<input id="requested_date" type="date" required></label><label>Zeitraum<select id="requested_time"><option>Vormittags</option><option>08:00 – 10:00</option><option>10:00 – 12:00</option><option>13:00 – 15:00</option><option>15:00 – 17:00</option></select></label></div>
+        <div id="durationInfo" class="notice"></div>
+      </div>
 
       <h3>Kontaktdaten</h3>
       <div class="field-grid"><label>Vorname<input id="first_name" required></label><label>Nachname<input id="last_name" required></label><label>Telefon<input id="phone" required></label><label>E-Mail<input id="email" type="email" required></label></div>
