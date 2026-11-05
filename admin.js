@@ -1104,7 +1104,7 @@ function invoiceSourceLink(invoice){
   return {href:'https://drive.google.com/drive/search?q='+encodeURIComponent(value),label:'In Drive suchen'};
 }
 
-async async function syncInvoiceCustomers(rows){
+async function syncInvoiceCustomers(rows){
   if(!Array.isArray(rows)||!rows.length)return;
   try{
     const {data:existing,error}=await db.from('customers').select('*');
