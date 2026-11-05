@@ -1017,14 +1017,14 @@ function normalizeCustomerText(value){
 
 function cleanInvoiceCustomerName(value){
   return String(value??'').trim()
-    .replace(/\\.(pdf)$/i,'')
-    .replace(/^(herrn?|frau|familie)\\s+/i,'')
-    .replace(/\\s+(?:durch\\s+)?(?:direkt(?:überweisung|zahlung)|überweisung|barzahlung|bereits\\s+bezahlt|schon\\s+bezahlt|bezahlt|storno(?:\\s+rechnung)?|rechnung\\s+storniert).*$/i,'')
+    .replace(/\.(pdf)$/i,'')
+    .replace(/^(herrn?|frau|familie)\s+/i,'')
+    .replace(/\s+(?:durch\s+)?(?:direkt(?:überweisung|zahlung)|überweisung|barzahlung|bereits\s+bezahlt|schon\s+bezahlt|bezahlt|storno(?:\s+rechnung)?|rechnung\s+storniert).*$/i,'')
     .replace(/[-_]+/g,' ')
-    .replace(/\\s+/g,' ').trim();
+    .replace(/\s+/g,' ').trim();
 }
 function sameInvoicePerson(a,b){
-  const tokens=v=>normalizeCustomerText(cleanInvoiceCustomerName(v)).split(/\\s+/).filter(Boolean).sort();
+  const tokens=v=>normalizeCustomerText(cleanInvoiceCustomerName(v)).split(/\s+/).filter(Boolean).sort();
   const x=tokens(a),y=tokens(b);
   return x.length===2 && y.length===2 && x[0]===y[0] && x[1]===y[1];
 }
