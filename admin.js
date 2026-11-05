@@ -1015,8 +1015,21 @@ function normalizeCustomerText(value){
   return String(value??'').toLowerCase().trim().replace(/\s+/g,' ').replace(/[.,;:()\[\]{}]/g,'');
 }
 
+function cleanInvoiceCustomerName(value){
+  return String(value??'').trim()
+    .replace(/\.(pdf)$/i,'')
+    .replace(/^(herrn?|frau|familie)\s+/i,'')
+    .replace(/\s+(?:durch\s+)?(?:direkt(?:überweisung|zahlung)|überweisung|barzahlung|bereits\s+bezahlt|schon\s+bezahlt|bezahlt|storno(?:\s+rechnung)?|rechnung\s+storniert).*$/i,'')
+    .replace(/[-_]+/g,' ')
+    .replace(/\s+/g,' ').trim();
+}
+function sameInvoicePerson(a,b){
+  const tokens=v=>normalizeCustomerText(cleanInvoiceCustomerName(v)).split(/\s+/).filter(Boolean).sort();
+  const x=tokens(a),y=tokens(b);
+  return x.length===2 && y.length===2 && x[0]===y[0] && x[1]===y[1];
+}
 function invoiceCustomerParts(value){
-  const raw=String(value??'').trim();
+  const raw=cleanInvoiceCustomerName(value);
   if(!raw)return {firma:'',vorname:'',nachname:''};
   const business=/\b(gmbh|ug|ag|kg|ohg|gbr|e\.k\.|e\.v\.|brandschutz|service|leistungen|fahrzeug|autohaus|autoteile|werkstatt|immobilien|verwaltung|handel|technik|solutions|logistik|bau|bauunternehmen|versicherung|hotel|gastronomie)\b/i.test(raw);
   const parts=raw.split(/\s+/).filter(Boolean);
@@ -1058,7 +1071,7 @@ function invoiceSourceLink(invoice){
   return {href:'https://drive.google.com/drive/search?q='+encodeURIComponent(value),label:'In Drive suchen'};
 }
 
-async function syncInvoiceCustomers(rows){
+async async function syncInvoiceCustomers(rows){
   if(!Array.isArray(rows)||!rows.length)return;
   try{
     const {data:existing,error}=await db.from('customers').select('*');
@@ -1066,15 +1079,18 @@ async function syncInvoiceCustomers(rows){
     const customers=Array.isArray(existing)?existing:[];
     let changed=false;
     for(const invoice of rows){
-      const invoiceName=String(invoice.kunde||'').trim();
+      const invoiceName=cleanInvoiceCustomerName(invoice.kunde);
       if(!invoiceName || invoiceName==='—')continue;
       const norm=normalizeCustomerText(invoiceName);
       const parts=invoiceCustomerParts(invoiceName);
       const fullName=normalizeCustomerText([parts.vorname,parts.nachname].filter(Boolean).join(' '));
       let match=customers.find(c=>{
-        const company=normalizeCustomerText(c.firma);
-        const name=normalizeCustomerText([c.vorname,c.nachname].filter(Boolean).join(' '));
-        return company===norm || name===norm || (fullName && name===fullName);
+        const company=normalizeCustomerText(cleanInvoiceCustomerName(c.firma));
+        const name=[c.vorname,c.nachname].filter(Boolean).join(' ');
+        return (company && company===norm) ||
+          (fullName && sameInvoicePerson(name,fullName)) ||
+          (!parts.firma && sameInvoicePerson(name,invoiceName)) ||
+          (!parts.firma && sameInvoicePerson(c.firma,invoiceName));
       });
       if(match){
         const patch={updated_at:new Date().toISOString()};
@@ -1118,6 +1134,7 @@ async function loadInvoices(){
       if(!String(row.kunde||'').trim() || String(row.kunde).trim()==='—'){
         row.kunde=invoiceCustomerFromFilename(row.quelldatei||row.pdf_url||row.drive_url,row.rechnungsnummer)||row.kunde||'';
       }
+      row.kunde=cleanInvoiceCustomerName(row.kunde);
       return row;
     }):[];
     currentInvoices=rows;
