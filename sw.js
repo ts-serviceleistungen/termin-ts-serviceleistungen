@@ -56,6 +56,5 @@ self.addEventListener('fetch', event => {
         }
         return response;
       }).catch(() => caches.match('./index.html'))
-    )
   );
 });
