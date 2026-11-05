@@ -8,7 +8,40 @@ const dashEl = document.getElementById('dash');
 const loginForm = document.getElementById('loginForm');
 const emailEl = document.getElementById('email');
 const passwordEl = document.getElementById('password');
+
 const loginMsg = document.getElementById('loginMsg');
+
+// Login-Handler früh registrieren, damit andere Dashboard-Fehler ihn nicht blockieren.
+if (loginForm) {
+  loginForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    loginMsg?.classList.add('hidden');
+    const submitButton = loginForm.querySelector('button[type="submit"], button:not([type])');
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = 'Anmeldung läuft…';
+    }
+    try {
+      const { error } = await db.auth.signInWithPassword({
+        email: emailEl.value.trim(),
+        password: passwordEl.value
+      });
+      if (error) {
+        showLoginMessage(error.message);
+        return;
+      }
+      await init();
+    } catch (error) {
+      showLoginMessage(error?.message || 'Anmeldung fehlgeschlagen. Bitte Seite neu laden und erneut versuchen.');
+      console.error('Login-Fehler:', error);
+    } finally {
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Anmelden';
+      }
+    }
+  });
+}
 const logoutBtn = document.getElementById('logout');
 const refreshBtn = document.getElementById('refresh');
 const listEl = document.getElementById('list');
@@ -1745,7 +1778,7 @@ nextMonthBtn?.addEventListener('click',()=>{
   renderCalendarRequests();
 });
 
-loginForm.addEventListener('submit',async e=>{e.preventDefault();loginMsg.classList.add('hidden');const {error}=await db.auth.signInWithPassword({email:emailEl.value.trim(),password:passwordEl.value});if(error){showLoginMessage(error.message);return}await init()});
+
 listEl.addEventListener('click',async e=>{const button=e.target.closest('button[data-action]');if(!button)return;const id=button.dataset.id;const action=button.dataset.action;if(action==='details')return openDetails(id);if(action==='confirm')return confirmRequest(id);if(action==='reject')return rejectRequest(id);if(action==='alternative')return alternativeRequest(id);if(action==='delete')return deleteRequest(id)});
 detailActions.addEventListener('click',async e=>{const button=e.target.closest('button[data-modal-action]');if(!button||!selectedRequest)return;const action=button.dataset.modalAction;if(action==='confirm')await confirmRequest(selectedRequest.id);if(action==='reject')await rejectRequest(selectedRequest.id);if(action==='alternative')await alternativeRequest(selectedRequest.id);if(action==='delete')await deleteRequest(selectedRequest.id)});
 closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',async()=>{refreshBtn.disabled=true;try{await load();await loadReceipts();await loadFinancials();await loadInvoices();await loadOffers(false);await loadCustomers();}finally{refreshBtn.disabled=false;}});
