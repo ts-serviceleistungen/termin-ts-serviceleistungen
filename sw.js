@@ -1,4 +1,4 @@
-const CACHE = 'ts-serviceleistungen-pwa-v20261021-4';
+const CACHE = 'ts-serviceleistungen-pwa-v20261105-loginfix';
 const SHELL = [
   './',
   './index.html',
