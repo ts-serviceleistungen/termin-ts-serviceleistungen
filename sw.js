@@ -1,4 +1,4 @@
-const CACHE = 'ts-serviceleistungen-pwa-v20261105-loginfix';
+const CACHE = 'ts-serviceleistungen-pwa-v20261110-no-brandschutz';
 const SHELL = [
   './',
   './index.html',
