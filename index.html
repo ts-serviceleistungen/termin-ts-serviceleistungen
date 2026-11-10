@@ -8,7 +8,7 @@
 <link rel="apple-touch-icon" href="./assets/icon-192.png">
 <meta name="description" content="T.S. Serviceleistungen – Anfrage">
 <title>T.S. Serviceleistungen – Anfrage</title>
-<link rel="stylesheet" href="request.css?v=20261110-no-brandschutz-final">
+<link rel="stylesheet" href="request.css?v=20261110-renovierung-1">
 </head>
 <body>
 <header class="topbar">
@@ -37,6 +37,7 @@
       <button class="service-card" onclick="pick('Ersatzteilanfrage')"><span class="service-icon">⚙️</span><span><b>Ersatzteilanfrage</b><small>Ersatzteile und Teilenummern</small></span><strong>→</strong></button>
       <button class="service-card" onclick="pick('Reifenanfrage')"><span class="service-icon">🛞</span><span><b>Reifenanfrage</b><small>Sommer · Winter · Ganzjahr</small></span><strong>→</strong></button>
       <button class="service-card" onclick="pick('Zubehörmontage')"><span class="service-icon">🔧</span><span><b>Zubehörmontage</b><small>Montage und technische Nachrüstung</small></span><strong>→</strong></button>
+      <button class="service-card" onclick="pick('Renovierung & Reparaturen')"><span class="service-icon">🛠️</span><span><b>Renovierung &amp; Reparaturen</b><small>Malerarbeiten · Boden · Fugen · Montage · Kleinreparaturen</small></span><strong>→</strong></button>
     </div>
   </section>
 
@@ -75,6 +76,17 @@
       </div>
 
       <div id="parts" class="hidden"><h3>Details zur Anfrage</h3><label>Teil / Zubehör / Reifen<textarea id="details" placeholder="Was wird benötigt bzw. montiert?"></textarea></label><div class="field-grid two"><label>Anzahl<input id="quantity" type="number" min="1" value="1"></label><label>Reifenart<select id="tire_type"><option>Keine Angabe</option><option>Sommerreifen</option><option>Winterreifen</option><option>Ganzjahresreifen</option></select></label></div></div>
+      <div id="renovationBlock" class="hidden">
+        <h3>Angaben zu Renovierung &amp; Reparatur</h3>
+        <div class="field-grid two">
+          <label>Welche Arbeit wird benötigt? <select id="renovation_type"><option value="">Bitte auswählen</option><option>Maler- und Ausbesserungsarbeiten</option><option>Silikonfugen erneuern</option><option>Bodenbeläge verlegen</option><option>Kleinere Reparaturarbeiten</option><option>Möbel- und Bauteilmontage</option><option>Pflaster- und Plattenarbeiten</option><option>Komplette Zimmer renovieren</option><option>Sonstige Renovierungsarbeiten</option></select></label>
+          <label>Objektart <select id="renovation_object"><option>Wohnhaus</option><option>Wohnung</option><option>Gewerbeobjekt</option><option>Sonstiges</option></select></label>
+          <label>Betroffener Bereich<input id="renovation_area" placeholder="z. B. Badezimmer, Wohnzimmer, Außenbereich"></label>
+          <label>Größe / Umfang<input id="renovation_size" placeholder="z. B. ca. 20 m² oder 2 Zimmer"></label>
+        </div>
+        <label>Weitere Beschreibung<textarea id="renovation_description" placeholder="Beschreiben Sie bitte möglichst genau, was gemacht werden soll."></textarea></label>
+        <div class="notice">Bitte laden Sie weiter unten gerne Fotos des Bereichs hoch. So können wir den Aufwand besser einschätzen.</div>
+      </div>
 
       <div id="appointmentBlock">
         <h3>Wunschtermin</h3>
@@ -96,7 +108,7 @@
 <footer><span>© T.S. Serviceleistungen</span><a href="https://ts-serviceleistungen.github.io/ts-serviceleistungen-homepage/impressum.html" target="_blank" rel="noopener">Impressum</a><a href="datenschutz.html">Datenschutz Online-Anfrage</a><a href="https://ts-serviceleistungen.github.io/ts-serviceleistungen-homepage/datenschutz.html" target="_blank" rel="noopener">Datenschutz Homepage</a><a href="admin.html">Admin Login</a></footer>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
-<script src="app.js?v=20261110-no-brandschutz-final"></script>
+<script src="app.js?v=20261110-renovierung-1"></script>
 <script>
 // Sicherheitsnetz: Brandschutz darf in der öffentlichen Anfrageauswahl nicht erscheinen.
 document.querySelectorAll('.service-card').forEach(card => {
