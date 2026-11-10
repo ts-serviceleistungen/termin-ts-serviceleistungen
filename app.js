@@ -3,7 +3,7 @@ const db=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
 const $=id=>document.getElementById(id);
 const FUNCTION_URL=`${SUPABASE_URL}/functions/v1/notify-new-request`;
 const DURATION_HOURS={'Außenreinigung':2,'Innenraumreinigung':4,'Polsterreinigung':4,'Komplettaufbereitung':8,'Politur':8,'Lackversiegelung':8};
-function calculateDuration(){const service=$('service_type').value;if(service!=='Fahrzeugpflege')return{hours:2,label:'2 Stunden'};const options=[...document.querySelectorAll('input[name=care]:checked')].map(x=>x.value);let hours=options.reduce((s,x)=>s+(DURATION_HOURS[x]||0),0);if(!hours)hours=2;return{hours,label:hours===4?'½ Arbeitstag':hours===8?'1 Arbeitstag':`${hours} Stunden`}}
+function calculateDuration(){const service=$('service_type').value;if(service==='Renovierung & Reparaturen')return{hours:0,label:'Nach Aufwand'};if(service!=='Fahrzeugpflege')return{hours:2,label:'2 Stunden'};const options=[...document.querySelectorAll('input[name=care]:checked')].map(x=>x.value);let hours=options.reduce((s,x)=>s+(DURATION_HOURS[x]||0),0);if(!hours)hours=2;return{hours,label:hours===4?'½ Arbeitstag':hours===8?'1 Arbeitstag':`${hours} Stunden`}}
 function ensureDurationBox(){const el=$('durationInfo');if(!el)return;const d=calculateDuration();el.innerHTML=`<b>Voraussichtliche Bearbeitungsdauer: ${d.label}</b><br>Der Termin wird erst nach Prüfung und Bestätigung durch T.S. Serviceleistungen verbindlich.`}
 function pick(service){
   $('service_type').value=service;
