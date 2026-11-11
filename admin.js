@@ -54,6 +54,7 @@ const requestsView = document.getElementById('requestsView');
 const ordersView = document.getElementById('ordersView');
 const orderList = document.getElementById('orderList');
 const orderSearch = document.getElementById('orderSearch');
+const orderStatusFilter = document.getElementById('orderStatusFilter');
 const manualOrderForm = document.getElementById('manualOrderForm');
 const manualOrderMsg = document.getElementById('manualOrderMsg');
 const orderCountEl = document.getElementById('orderCount');
@@ -1737,15 +1738,22 @@ async function loadOrders(){
 function renderOrders(){
   if(!orderList)return;
   const q=(orderSearch?.value||'').trim().toLowerCase();
-  const rows=currentOrders.filter(o=>[o.order_number,o.customer_name,o.service_type,o.description,o.notes,o.external_invoice_number].join(' ').toLowerCase().includes(q));
+  const selectedStatus=orderStatusFilter?.value||'';
+  const rows=currentOrders.filter(o=>{
+    const searchable=[o.order_number,o.customer_name,o.customer_email,o.customer_phone,o.service_type,o.description,o.notes,o.external_invoice_number,o.scheduled_date,o.status].join(' ').toLowerCase();
+    return (!q||searchable.includes(q))&&(!selectedStatus||o.status===selectedStatus);
+  });
   if(orderCountEl)orderCountEl.textContent=String(currentOrders.length);
   if(orderVolumeEl)orderVolumeEl.textContent=euro(currentOrders.reduce((sum,o)=>sum+Number(o.agreed_amount||0),0));
   if(orderOpenCountEl)orderOpenCountEl.textContent=String(currentOrders.filter(o=>['Offen','Geplant'].includes(o.status)).length);
   if(orderInProgressCountEl)orderInProgressCountEl.textContent=String(currentOrders.filter(o=>o.status==='In Arbeit').length);
   if(orderCompletedCountEl)orderCompletedCountEl.textContent=String(currentOrders.filter(o=>o.status==='Abgeschlossen').length);
-  if(!rows.length){orderList.innerHTML='<div class="empty-box">Noch keine passenden Aufträge vorhanden. Du kannst einen Auftrag direkt aus einer Kundenanfrage erstellen.</div>';return;}
+  if(!rows.length){
+    orderList.innerHTML='<div class="empty-box">Keine Aufträge für diese Suche oder diesen Status gefunden.</div>';
+    return;
+  }
   const statuses=['Offen','Geplant','In Arbeit','Abgeschlossen','Storniert'];
-  orderList.innerHTML=rows.map(o=>{
+  const renderCard=o=>{
     const linked=currentOffers.find(x=>x.order_id===o.id);
     const availableOffers=currentOffers.filter(x=>!x.order_id||x.order_id===o.id);
     const offerOptions=availableOffers.map(x=>{
@@ -1753,8 +1761,10 @@ function renderOrders(){
       const customer=x.kundenname||x.firma||'';
       return '<option value="'+escapeHtml(x.id)+'" '+(linked?.id===x.id?'selected':'')+'>'+escapeHtml(number+' · '+customer+' · '+euro(x.betrag||0))+'</option>';
     }).join('');
+    const contact=[o.customer_phone?'Telefon: '+o.customer_phone:'',o.customer_email?'E-Mail: '+o.customer_email:''].filter(Boolean).join(' · ');
+    const appointment=o.scheduled_date?formatDate(o.scheduled_date)+(o.scheduled_time?' · '+o.scheduled_time:''):'Noch kein Ausführungstermin festgelegt';
     return `<article class="order-card" data-order-card="${escapeHtml(o.id)}">
-      <div class="order-card-head"><div><span class="eyebrow">AUFTRAG</span><h3>${escapeHtml(o.order_number)}</h3><p>${escapeHtml(o.customer_name)} · ${escapeHtml(o.service_type)}</p></div><span class="order-card-value">${euro(o.agreed_amount||0)}</span></div>
+      <div class="order-card-head"><div><span class="eyebrow">AUFTRAG</span><h3>${escapeHtml(o.order_number)}</h3><p>${escapeHtml(o.customer_name)} · ${escapeHtml(o.service_type)}</p><div class="order-contact">${escapeHtml(contact||'Keine Kontaktdaten hinterlegt')}</div><div class="order-meta">Ausführung: ${escapeHtml(appointment)} · Angelegt: ${escapeHtml(formatDate(String(o.created_at||'').slice(0,10)))}</div></div><span class="order-card-value">${euro(o.agreed_amount||0)}</span></div>
       <div class="order-fields">
         <label>Status<select data-order-status="${escapeHtml(o.id)}">${statuses.map(s=>'<option value="'+s+'" '+(o.status===s?'selected':'')+'>'+s+'</option>').join('')}</select></label>
         <label>Auftragswert (€)<input type="number" min="0" step="0.01" value="${Number(o.agreed_amount||0).toFixed(2)}" data-order-field="agreed_amount"></label>
@@ -1768,7 +1778,14 @@ function renderOrders(){
       </div>
       <div class="order-card-foot"><span>${linked?'Verknüpftes Angebot: '+escapeHtml(linked.angebotsnummer||'ohne Nummer'):'Noch kein Angebot zugeordnet'}</span><button type="button" class="gold-btn" data-order-save="${escapeHtml(o.id)}">Änderungen speichern</button></div>
     </article>`;
+  };
+  const groupedStatuses=statuses.map(status=>{
+    const groupRows=rows.filter(o=>o.status===status);
+    if(!groupRows.length)return '';
+    return `<section class="order-status-group"><div class="order-status-heading"><h3>${status}</h3><span>${groupRows.length} ${groupRows.length===1?'Auftrag':'Aufträge'}</span></div>${groupRows.map(renderCard).join('')}</section>`;
   }).join('');
+  const ungrouped=rows.filter(o=>!statuses.includes(o.status));
+  orderList.innerHTML=groupedStatuses+(ungrouped.length?`<section class="order-status-group"><div class="order-status-heading"><h3>Weitere Status</h3><span>${ungrouped.length}</span></div>${ungrouped.map(renderCard).join('')}</section>`:'');
 }
 
 async function createManualOrder(event){
@@ -2009,6 +2026,7 @@ document.querySelectorAll('[data-back-dashboard]').forEach(btn=>btn.addEventList
 
 
 orderSearch?.addEventListener('input',renderOrders);
+orderStatusFilter?.addEventListener('change',renderOrders);
 manualOrderForm?.addEventListener('submit',createManualOrder);
 ordersView?.addEventListener('change',e=>{
   const select=e.target.closest('[data-order-status]');if(select)saveOrderStatus(select);
