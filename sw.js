@@ -1,4 +1,4 @@
-const CACHE = 'ts-serviceleistungen-pwa-v20261111-invoice-email-1';
+const CACHE = 'ts-serviceleistungen-pwa-v20261111-invoice-pdf-2';
 const SHELL = [
   './',
   './index.html',
@@ -17,6 +17,7 @@ const SHELL = [
   './icon-512.png',
   './ts-logo-left.png',
   './ts-logo-right.png',
+  './logo-serviceleistungen.png',
   './bmw-m3-hero.png',
   './admin-hero-reference.jpg'
 ];
