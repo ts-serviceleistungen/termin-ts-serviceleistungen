@@ -28,19 +28,37 @@ function calculateDuration(){
 function formatLocalDate(date){
   return date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');
 }
+function buildVehicleSegments(date,time,hours){
+  let remaining=Number(hours),first=true;
+  let day=new Date(date+'T12:00:00');
+  const segments=[];
+  while(remaining>0){
+    let start;
+    if(first)start=new Date(date+'T'+time+':00');
+    else{
+      day.setDate(day.getDate()+1);
+      while(day.getDay()===0||day.getDay()===6)day.setDate(day.getDate()+1);
+      start=new Date(day.getFullYear(),day.getMonth(),day.getDate(),8,0,0,0);
+    }
+    const part=Math.min(remaining,8);
+    const end=new Date(start.getTime()+part*3600000);
+    segments.push({start,end});
+    remaining-=part;
+    first=false;
+  }
+  return segments;
+}
 function ensureDurationBox(){
   const el=$('durationInfo');if(!el)return;
   const d=calculateDuration();
   const date=$('requested_date').value,time=$('requested_time').value;
   let finish='';
-  if(date&&time){
-    const start=new Date(date+'T'+time+':00');
-    if(!Number.isNaN(start.getTime())){
-      const end=new Date(start.getTime()+d.hours*3600000);
-      finish='<br>Voraussichtliches Ende: <b>'+end.toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})+'</b>';
-    }
+  if(date&&time&&$('service_type').value==='Fahrzeugpflege'){
+    const segments=buildVehicleSegments(date,time,d.hours);
+    const end=segments[segments.length-1]?.end;
+    if(end)finish='<br>Voraussichtliches Ende: <b>'+end.toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})+'</b>';
   }
-  if($('service_type').value==='Fahrzeugpflege')el.innerHTML='<b>Voraussichtliche Arbeitsdauer: '+d.label+'</b>'+finish+'<br>Der ausgewählte Zeitpunkt ist Ihre gewünschte Abgabezeit bzw. der Arbeitsbeginn. 30 Minuten Abstand zu anderen Terminen werden berücksichtigt.<br>Verbindlich wird der Termin erst nach Ihrer persönlichen Bestätigung durch T.S. Serviceleistungen.';
+  if($('service_type').value==='Fahrzeugpflege')el.innerHTML='<b>Voraussichtliche Arbeitsdauer: '+d.label+'</b>'+finish+'<br>Der gewählte Zeitpunkt ist die gewünschte Abgabezeit bzw. der Arbeitsbeginn. Bei mehr als 8 Stunden wird die Arbeit auf weitere Werktage verteilt. 30 Minuten Abstand zu anderen Terminen werden berücksichtigt.<br>Der Termin wird erst nach persönlicher Bestätigung verbindlich.';
   else el.innerHTML='<b>Voraussichtliche Bearbeitungsdauer: '+d.label+'</b><br>Der Termin wird erst nach Prüfung und Bestätigung durch T.S. Serviceleistungen verbindlich.';
 }
 function setAppointmentTimeOptions(vehicleCare){
@@ -75,24 +93,33 @@ function pick(service){
   window.scrollTo({top:$('box').offsetTop-20,behavior:'smooth'});
 }
 function resetService(){$('box').classList.add('hidden');window.scrollTo({top:0,behavior:'smooth'})}
-async function loadBookedWindows(date){
-  const {data,error}=await db.rpc('get_all_booked_windows',{p_from:date,p_to:date});
+async function loadBookedWindows(from,to){
+  const {data,error}=await db.rpc('get_all_booked_windows',{p_from:from,p_to:to});
   if(error)throw new Error('Die Kalenderverfügbarkeit konnte nicht geprüft werden: '+error.message);
   return data||[];
 }
 function overlaps(date,time,windows,duration){
-  const start=new Date(date+'T'+time+':00');
-  if(Number.isNaN(start.getTime()))return true;
-  const end=new Date(start.getTime()+duration.hours*3600000);
+  const segments=buildVehicleSegments(date,time,duration.hours);
   const buffer=30*60*1000;
-  return windows.some(w=>new Date(w.booking_start)<new Date(end.getTime()+buffer)&&new Date(w.booking_end)>new Date(start.getTime()-buffer));
+  return segments.some(segment=>windows.some(w=>
+    new Date(w.booking_start)<new Date(segment.end.getTime()+buffer)&&
+    new Date(w.booking_end)>new Date(segment.start.getTime()-buffer)
+  ));
 }
 async function validateAvailability(){
   if($('service_type').value!=='Fahrzeugpflege')return true;
   const date=$('requested_date').value,time=$('requested_time').value;
   if(!date||!time)return true;
   try{
-    const duration=calculateDuration(),windows=await loadBookedWindows(date);
+    const day=new Date(date+'T12:00:00').getDay();
+    if(day===0||day===6){
+      $('msg').textContent='Fahrzeugpflege-Termine sind nur von Montag bis Freitag möglich. Bitte wählen Sie einen Werktag.';
+      $('msg').classList.remove('hidden');return false;
+    }
+    const duration=calculateDuration();
+    const segments=buildVehicleSegments(date,time,duration.hours);
+    const lastDate=formatLocalDate(segments[segments.length-1].end);
+    const windows=await loadBookedWindows(date,lastDate);
     if(overlaps(date,time,windows,duration)){
       $('msg').textContent='Dieser Startzeitpunkt ist bereits belegt oder der 30-Minuten-Puffer wird unterschritten. Bitte wählen Sie eine andere Abgabezeit.';
       $('msg').classList.remove('hidden');return false;
