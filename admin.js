@@ -2039,7 +2039,7 @@ function renderOrders(){
         <label class="order-wide">Leistungsbeschreibung<textarea rows="2" data-order-field="description">${escapeHtml(o.description||'')}</textarea></label>
         <label class="order-wide">Interne Notizen<textarea rows="2" data-order-field="notes">${escapeHtml(o.notes||'')}</textarea></label>
       </div>
-      <div class="order-card-foot"><span>${linked?'Verknüpftes Angebot: '+escapeHtml(linked.angebotsnummer||'ohne Nummer'):'Noch kein Angebot zugeordnet'}</span><div class="order-card-actions"><button type="button" class="gold-btn" data-order-save="${escapeHtml(o.id)}">Änderungen speichern</button><button type="button" class="danger-btn" data-order-delete="${escapeHtml(o.id)}">Auftrag löschen</button></div></div>
+      <div class="order-card-foot"><span>${linked?'Verknüpftes Angebot: '+escapeHtml(linked.angebotsnummer||'ohne Nummer'):'Noch kein Angebot zugeordnet'}</span><div class="order-card-actions"><button type="button" class="secondary-btn" data-order-invoice="${escapeHtml(o.id)}">Rechnung erstellen</button><button type="button" class="gold-btn" data-order-save="${escapeHtml(o.id)}">Änderungen speichern</button><button type="button" class="danger-btn" data-order-delete="${escapeHtml(o.id)}">Auftrag löschen</button></div></div>
     </article>`;
   };
   const groupedStatuses=statuses.map(status=>{
@@ -2298,7 +2298,7 @@ function showView(view){
     receiptDate.value=receiptDate.value||new Date().toLocaleDateString('sv-SE');
     loadReceipts();
   }
-  if(view==='invoices')loadInvoices();
+  if(view==='invoices'){loadInvoices();loadInvoiceSettings().catch(err=>console.warn('Rechnungseinstellungen:',err.message));loadIssuedInvoices();ensureInvoiceSources().catch(err=>console.warn('Rechnungsquellen:',err.message));}
   if(view==='offers')loadOffers(false);
   if(view==='customers')resetCustomerForm();
   if(view==='existingCustomers')loadBestandskunden();
@@ -2344,8 +2344,24 @@ ordersView?.addEventListener('change',e=>{
   const amount=e.target.closest('[data-order-amount]');if(amount)saveOrderAmount(amount);
   const offer=e.target.closest('[data-order-offer]');if(offer)saveOrderOfferLink(offer);
 });
-ordersView?.addEventListener('click',e=>{const del=e.target.closest('[data-order-delete]');if(del)return deleteOrder(del);const button=e.target.closest('[data-order-save]');if(button)saveOrderDetails(button)});
+ordersView?.addEventListener('click',e=>{const invoice=e.target.closest('[data-order-invoice]');if(invoice){showView('invoices');return openInvoiceDraftFromOrder(invoice.dataset.orderInvoice);}const del=e.target.closest('[data-order-delete]');if(del)return deleteOrder(del);const button=e.target.closest('[data-order-save]');if(button)saveOrderDetails(button)});
 
+invoiceSettingsForm?.addEventListener('submit',saveInvoiceSettings);
+invoiceDraftForm?.addEventListener('submit',createInvoiceDraft);
+invoiceNewBtn?.addEventListener('click',async()=>{resetInvoiceDraft();invoiceDraftForm.classList.remove('hidden');invoiceSetField('invoiceServiceDate',new Date().toLocaleDateString('sv-SE'));await ensureInvoiceSources();invoiceDraftForm.scrollIntoView({behavior:'smooth',block:'start'});});
+invoiceDraftCancelBtn?.addEventListener('click',()=>invoiceDraftForm.classList.add('hidden'));
+invoiceAddItemBtn?.addEventListener('click',()=>addInvoiceItemRow());
+invoiceDraftItems?.addEventListener('click',e=>{const b=e.target.closest('[data-inv-item-remove]');if(b){b.closest('.invoice-item-row')?.remove();if(!invoiceDraftItems.querySelector('.invoice-item-row'))addInvoiceItemRow();}});
+invoiceSourceOrder?.addEventListener('change',onInvoiceSourceOrder);
+invoiceSourceOffer?.addEventListener('change',onInvoiceSourceOffer);
+issuedInvoiceSearch?.addEventListener('input',renderIssuedInvoices);
+issuedInvoiceList?.addEventListener('click',async e=>{
+  const issue=e.target.closest('[data-invoice-issue]');if(issue)return issueInvoice(issue.dataset.invoiceIssue);
+  const del=e.target.closest('[data-invoice-delete]');if(del)return deleteInvoiceDraft(del.dataset.invoiceDelete);
+  const cancel=e.target.closest('[data-invoice-cancel]');if(cancel)return cancelInvoice(cancel.dataset.invoiceCancel);
+  const payment=e.target.closest('[data-invoice-payment]');if(payment)return addInvoicePayment(payment.dataset.invoicePayment);
+  const download=e.target.closest('[data-invoice-download]');if(download)return downloadInvoiceDocument(download.dataset.invoiceDownload,download.dataset.kind);
+});
 offerSearch?.addEventListener('input',renderOffers);
 offerStatusFilter?.addEventListener('change',renderOffers);
 offerList?.addEventListener('change',e=>{
@@ -2433,6 +2449,6 @@ nextMonthBtn?.addEventListener('click',()=>{
 
 listEl.addEventListener('click',async e=>{const button=e.target.closest('button[data-action]');if(!button)return;const id=button.dataset.id;const action=button.dataset.action;if(action==='details')return openDetails(id);if(action==='create-order')return createOrderFromRequest(id);if(action==='confirm')return confirmRequest(id);if(action==='reject')return rejectRequest(id);if(action==='alternative')return alternativeRequest(id);if(action==='delete')return deleteRequest(id)});
 detailActions.addEventListener('click',async e=>{const button=e.target.closest('button[data-modal-action]');if(!button||!selectedRequest)return;const action=button.dataset.modalAction;if(action==='create-order')await createOrderFromRequest(selectedRequest.id);if(action==='confirm')await confirmRequest(selectedRequest.id);if(action==='reject')await rejectRequest(selectedRequest.id);if(action==='alternative')await alternativeRequest(selectedRequest.id);if(action==='delete')await deleteRequest(selectedRequest.id)});
-closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',async()=>{refreshBtn.disabled=true;try{await load();await loadReceipts();await loadFinancials();await loadInvoices();await loadOffers(false);await loadCustomers();}finally{refreshBtn.disabled=false;}});
+closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',async()=>{refreshBtn.disabled=true;try{await load();await loadReceipts();await loadFinancials();await loadInvoices();await loadOffers(false);await loadCustomers();await loadIssuedInvoices();}finally{refreshBtn.disabled=false;}});
 refreshOffersBtn?.addEventListener('click',async()=>{refreshOffersBtn.disabled=true;try{await loadOffers(true);}finally{refreshOffersBtn.disabled=false;}});
 init();
