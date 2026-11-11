@@ -1,4 +1,4 @@
-const CACHE = 'ts-serviceleistungen-pwa-v20261111-invoice-pdf-2';
+const CACHE = 'ts-serviceleistungen-pwa-v20261111-invoice-delete-3';
 const SHELL = [
   './',
   './index.html',
@@ -46,6 +46,22 @@ self.addEventListener('fetch', event => {
 
   const url = new URL(request.url);
   if (url.origin !== location.origin) return;
+
+  // Always fetch live admin code/config so deployed fixes cannot be hidden
+  // behind an older cached dashboard bundle.
+  const isAdminAsset = /\\/(admin\\.html|admin\\.js|config\\.js)$/.test(url.pathname);
+  if (isAdminAsset) {
+    event.respondWith(
+      fetch(request, { cache: 'no-store' }).then(response => {
+        if (response && response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE).then(cache => cache.put(request, copy));
+        }
+        return response;
+      }).catch(() => caches.match(request))
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(request).then(cached => {
