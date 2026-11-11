@@ -102,3 +102,9 @@ input,select,textarea{width:100%;margin-top:6px;border:1px solid #d9d3c7;backgro
 .order-wide{grid-column:1/-1}
 .order-card-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid #eee;font-size:13px;color:var(--muted)}
 @media(max-width:600px){.order-fields{grid-template-columns:1fr}.order-wide{grid-column:auto}.order-card{padding:12px}.order-card-head{flex-direction:column}}
+
+.order-create-panel{border:1px solid #e7dcc4;border-radius:12px;margin:16px 0;padding:0 14px;background:#fffdf8}
+.order-create-panel summary{cursor:pointer;font-weight:800;padding:14px 2px;color:#77590f}
+.order-create-form{border-top:1px solid #eee4d0;padding:14px 0}
+.order-create-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px}
+.order-create-actions [role="status"]{font-size:13px;color:var(--muted)}
