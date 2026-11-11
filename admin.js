@@ -1310,7 +1310,8 @@ async function createInvoiceDraft(event){
   const orderId=invoiceSourceOrder.value||null, offerId=invoiceSourceOffer.value||null;
   if(orderId&&offerId){invoiceDraftMsg.textContent='Bitte entweder einen Auftrag oder ein Angebot auswählen, nicht beides.';return;}
   const customerName=invoiceField('invoiceCustomerName');
-  const subtotal=rows.reduce((sum,x)=>sum+Math.round(x.quantity*x.unit_price*100)/100,0);\n  const payload={order_id:orderId,offer_id:offerId,customer_name:customerName,customer_company:invoiceField('invoiceCustomerCompany')||null,customer_street:invoiceField('invoiceCustomerStreet'),customer_postal_code:invoiceField('invoiceCustomerZip'),customer_city:invoiceField('invoiceCustomerCity'),customer_email:invoiceField('invoiceCustomerEmail')||null,service_date:invoiceField('invoiceServiceDate')||null,notes:invoiceField('invoiceDraftNotes')||null,subtotal,total:subtotal,tax_total:0};
+  const subtotal=rows.reduce((sum,x)=>sum+Math.round(x.quantity*x.unit_price*100)/100,0);
+  const payload={order_id:orderId,offer_id:offerId,customer_name:customerName,customer_company:invoiceField('invoiceCustomerCompany')||null,customer_street:invoiceField('invoiceCustomerStreet'),customer_postal_code:invoiceField('invoiceCustomerZip'),customer_city:invoiceField('invoiceCustomerCity'),customer_email:invoiceField('invoiceCustomerEmail')||null,service_date:invoiceField('invoiceServiceDate')||null,notes:invoiceField('invoiceDraftNotes')||null,subtotal,total:subtotal,tax_total:0};
   const source=orderId?currentOrders.find(x=>x.id===orderId):offerId?currentOffers.find(x=>x.id===offerId):null;
   payload.customer_id=source?.customer_id||null;
   const {data:invoice,error}=await db.from('issued_invoices').insert(payload).select('*').single();
