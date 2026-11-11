@@ -270,3 +270,8 @@ begin
 end; $$;
 revoke all on function public.issue_invoice(uuid) from public,anon;
 grant execute on function public.issue_invoice(uuid) to authenticated;
+
+-- Cancellation records inherit the original output format and references.
+alter table public.invoice_settings add column if not exists seller_contact_name text;
+alter table public.issued_invoices add column if not exists output_format text not null default 'pdf_xrechnung' check(output_format in ('pdf','pdf_xrechnung'));
+alter table public.issued_invoices add column if not exists seller_identifier text;
