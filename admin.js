@@ -1860,23 +1860,29 @@ async function saveOrderOfferLink(select){
   }
   select.disabled=true;
   try{
+    // Erst das neue Angebot zuordnen. So bleibt die bisherige Verknüpfung erhalten,
+    // falls die neue Zuordnung fehlschlägt.
+    if(nextId){
+      const {data,error}=await db.from('offers').update({order_id:order.id}).eq('id',nextId).is('order_id',null).select('id').maybeSingle();
+      if(error)throw error;
+      if(!data)throw new Error('Das Angebot wurde inzwischen einem anderen Auftrag zugeordnet. Bitte neu laden.');
+    }
     if(previous){
       const {error}=await db.from('offers').update({order_id:null}).eq('id',previous.id);
       if(error)throw error;
       previous.order_id=null;
     }
     if(nextId){
-      const {error}=await db.from('offers').update({order_id:order.id}).eq('id',nextId).is('order_id',null);
-      if(error)throw error;
       const selected=currentOffers.find(x=>x.id===nextId);
       if(selected)selected.order_id=order.id;
     }
     renderOrders();
     renderOffers();
-  }catch(error){alert('Angebot konnte nicht zugeordnet werden: '+error.message);await loadOffers(false);}
-  finally{select.disabled=false;}
+  }catch(error){
+    alert('Angebot konnte nicht zugeordnet werden: '+error.message);
+    await loadOffers(false);
+  }finally{select.disabled=false;}
 }
-
 async function saveOrderAmount(input){
   const order=currentOrders.find(o=>o.id===input.dataset.orderAmount);
   if(!order)return;
@@ -1885,12 +1891,14 @@ async function saveOrderAmount(input){
   const previous=Number(order.agreed_amount||0);
   if(amount===previous)return;
   input.disabled=true;
-  const {error}=await db.from('orders').update({agreed_amount:amount,updated_at:new Date().toISOString()}).eq('id',order.id);
-  if(error){input.value=previous.toFixed(2);alert('Auftragswert konnte nicht gespeichert werden: '+error.message);}
-  else{order.agreed_amount=amount;renderOrders();}
-  input.disabled=false;
+  try{
+    const {error}=await db.from('orders').update({agreed_amount:amount,updated_at:new Date().toISOString()}).eq('id',order.id);
+    if(error)throw error;
+    order.agreed_amount=amount;
+    renderOrders();
+  }catch(error){input.value=previous.toFixed(2);alert('Auftragswert konnte nicht gespeichert werden: '+error.message);}
+  finally{input.disabled=false;}
 }
-
 async function saveOrderStatus(select){
   const order=currentOrders.find(o=>o.id===select.dataset.orderStatus);
   if(!order)return;
@@ -1898,10 +1906,13 @@ async function saveOrderStatus(select){
   const status=select.value;
   if(status===previous)return;
   select.disabled=true;
-  const {error}=await db.from('orders').update({status,updated_at:new Date().toISOString()}).eq('id',order.id);
-  if(error){select.value=previous;alert('Auftragsstatus konnte nicht gespeichert werden: '+error.message);}
-  else{order.status=status;renderOrders();}
-  select.disabled=false;
+  try{
+    const {error}=await db.from('orders').update({status,updated_at:new Date().toISOString()}).eq('id',order.id);
+    if(error)throw error;
+    order.status=status;
+    renderOrders();
+  }catch(error){select.value=previous;alert('Auftragsstatus konnte nicht gespeichert werden: '+error.message);}
+  finally{select.disabled=false;}
 }
 async function createOrderFromRequest(id){
   const request=requests.find(r=>r.id===id);
