@@ -1468,17 +1468,28 @@ function buildXRechnungXml(inv,items){
 }
 async function loadInvoiceLogoDataUrl(){
   try{
-    const response=await fetch(new URL('./logo-serviceleistungen.png',window.location.href).href,{cache:'force-cache'});
-    if(!response.ok)throw new Error('Logo konnte nicht geladen werden.');
-    const blob=await response.blob();
-    return await new Promise((resolve,reject)=>{
-      const reader=new FileReader();
-      reader.onload=()=>resolve(reader.result);
-      reader.onerror=()=>reject(new Error('Logo konnte nicht gelesen werden.'));
-      reader.readAsDataURL(blob);
+    // Exaktes Logo aus der sevDesk-Originalrechnung, als WebP-Base64 im Repository abgelegt.
+    const response=await fetch(new URL('./logo-original-rechnung.webp.b64',window.location.href).href,{cache:'no-store'});
+    if(!response.ok)throw new Error('Original-Logo konnte nicht geladen werden.');
+    const encoded=(await response.text()).trim();
+    const image=new Image();
+    const dataUrl='data:image/webp;base64,'+encoded;
+    await new Promise((resolve,reject)=>{
+      image.onload=resolve;
+      image.onerror=()=>reject(new Error('Original-Logo konnte nicht dekodiert werden.'));
+      image.src=dataUrl;
     });
+    const canvas=document.createElement('canvas');
+    canvas.width=image.naturalWidth;
+    canvas.height=image.naturalHeight;
+    const ctx=canvas.getContext('2d');
+    if(!ctx)throw new Error('Logo-Konvertierung ist nicht verfügbar.');
+    ctx.fillStyle='#ffffff';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(image,0,0);
+    return canvas.toDataURL('image/png');
   }catch(error){
-    console.warn('Rechnungslogo konnte nicht geladen werden:',error);
+    console.warn('Original-Rechnungslogo konnte nicht geladen werden:',error);
     return null;
   }
 }
@@ -1490,11 +1501,11 @@ async function buildInvoicePdf(inv,items){
   const left=20,right=190,pageBottom=263;
   const safe=value=>String(value??'').trim();
   const fmtDate=value=>value?formatDate(value):'—';
-  const money=value=>euro(Number(value||0));
+  const money=value=>euro(Number(value||0)).replace(/\s*€/,' EUR');
   const sellerName=safe(s.name||s.seller_name||'T.S. Serviceleistungen');
-  const sellerStreet=safe(s.street||s.seller_street);
+  const sellerStreet=safe(s.street||s.seller_street).replace(/,\s*(\d)/,' $1');
   const sellerPlace=[s.postal_code||s.seller_postal_code,s.city||s.seller_city].filter(Boolean).join(' ');
-  const sellerEmail=safe(s.email||s.seller_email);
+  const sellerEmail=safe(s.email||s.seller_email||'info@ts-serviceleistungen.de');
   const sellerPhone=safe(s.phone||s.seller_phone);
   const taxNumber=safe(s.tax_number||s.seller_tax_number);
   const bankName=safe(s.bank_name||s.seller_bank_name||'N26');
@@ -1514,6 +1525,15 @@ async function buildInvoicePdf(inv,items){
     const lines=doc.splitTextToSize(safe(value)||'—',width);
     doc.text(lines,x,yy);
     return lines.length*lineHeight;
+  };
+  const drawLogo=()=>{
+    if(!logoData)return;
+    try{
+      const props=doc.getImageProperties(logoData);
+      const maxW=78,maxH=39,scale=Math.min(maxW/props.width,maxH/props.height);
+      const w=props.width*scale,h=props.height*scale;
+      doc.addImage(logoData,'PNG',right-w,5,w,h,undefined,'FAST');
+    }catch(error){console.warn('Original-Logo konnte nicht in die PDF eingefügt werden:',error);}
   };
   const footer=()=>{
     const pages=doc.getNumberOfPages();
@@ -1537,29 +1557,25 @@ async function buildInvoicePdf(inv,items){
     }
   };
   const addPage=()=>{
-    doc.addPage();y=22;
-    doc.setTextColor(...black);doc.setFont('helvetica','bold');doc.setFontSize(10);
-    text(sellerName+' · '+title+' · Fortsetzung',left,y);
-    y+=12;
+    doc.addPage();
+    drawLogo();
+    y=50;
   };
-  const ensureSpace=height=>{if(y+height>pageBottom)addPage();};
+  const ensureSpace=height=>{
+    if(y+height>pageBottom){addPage();return true;}
+    return false;
+  };
 
-  // Original-Kopf: Firmenlogo rechts oben, Absenderzeile links, Rechnungsdaten rechts.
-  if(logoData){
-    try{
-      const props=doc.getImageProperties(logoData);
-      const maxW=78,maxH=38,scale=Math.min(maxW/props.width,maxH/props.height);
-      const w=props.width*scale,h=props.height*scale;
-      doc.addImage(logoData,'PNG',right-w,5,w,h,undefined,'FAST');
-    }catch(error){console.warn('Rechnungslogo konnte nicht in die PDF eingefügt werden:',error);}
-  }
+  // Kopfbereich exakt nach der hochgeladenen sevDesk-Originalrechnung.
+  drawLogo();
   doc.setTextColor(...black);doc.setFont('helvetica','bold');doc.setFontSize(7.5);
   text(sellerName,left,48);
   doc.setFont('helvetica','normal');doc.setFontSize(7.2);
-  text('→',57,48);text(sellerStreet,63,48);text('→',98,48);text(sellerPlace,104,48);
+  text('>',57,48);text(sellerStreet,63,48);text('>',98,48);text(sellerPlace,104,48);
 
+  const previewNumber=String(inv.invoice_number||'ENTWURF');
   const meta=[
-    ['RECHNUNGS-NR.',safe(inv.invoice_number||'ENTWURF')],
+    ['RECHNUNGS-NR.',previewNumber],
     ['RECHNUNGSDATUM',fmtDate(inv.invoice_date)],
     ['LIEFERDATUM',fmtDate(inv.service_date||inv.invoice_date)],
     ['IHRE KUNDENNUMMER',safe(inv.customer_number||'—')],
@@ -1574,7 +1590,7 @@ async function buildInvoicePdf(inv,items){
     metaY+=5.2;
   });
 
-  // Empfängeranschrift wie in der sevDesk-Originalrechnung.
+  // Empfängeranschrift.
   doc.setTextColor(...black);doc.setFont('helvetica','normal');doc.setFontSize(9);
   y=58;
   y+=wrapped(recipient,left,y,95,9,4.5);
@@ -1583,7 +1599,7 @@ async function buildInvoicePdf(inv,items){
   y+=wrapped(recipientLine,left,y,95,9,4.5);
   y+=wrapped('Deutschland',left,y,95,9,4.5);
 
-  // Großzügiger Abstand bis zum gelben Rechnungstitel wie in der Vorlage.
+  // Gelbe Rechnungsüberschrift und Datum an den Originalpositionen.
   y=Math.max(107,y+30);
   doc.setFont('helvetica','bold');doc.setFontSize(14);doc.setTextColor(...gold);
   text((title==='Stornorechnung'?'Stornorechnung Nr. ':'Rechnungs Nr. ')+(inv.invoice_number||'ENTWURF'),left,y);
@@ -1612,8 +1628,7 @@ async function buildInvoicePdf(inv,items){
     const total=money(it.line_total??Number(it.quantity||1)*Number(it.unit_price||0));
     const lineHeight=4.8;
     const required=Math.max(7,descLines.length*lineHeight)+3;
-    ensureSpace(required);
-    if(y===22)drawTableHeader();
+    if(ensureSpace(required))drawTableHeader();
     doc.setTextColor(...black);doc.setFont('helvetica','normal');doc.setFontSize(8.5);
     text((index+1)+'.',20,y);
     doc.text(descLines,28,y);
@@ -1626,7 +1641,7 @@ async function buildInvoicePdf(inv,items){
   doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(...black);
   text('Gesamtbetrag netto',20,y+2);text(money(inv.subtotal??inv.total),180,y+2,{align:'right'});y+=13;
   doc.setFont('helvetica','normal');doc.setFontSize(8.5);
-  text(safe(inv.tax_note||'Umsatzsteuer nicht erhoben gemäß §19 UStG.'),20,y);y+=9;
+  text(safe(inv.tax_note||'Umsatzsteuer nicht erhoben gemäß §19UStG.'),20,y);y+=9;
   doc.setFillColor(...lightGrey);doc.roundedRect(18,y-5,164,10,1.5,1.5,'F');
   doc.setFont('helvetica','bold');doc.setFontSize(9.5);
   text('Gesamtbetrag brutto',20,y+2);text(money(inv.total),180,y+2,{align:'right'});y+=16;
@@ -1639,7 +1654,8 @@ async function buildInvoicePdf(inv,items){
     dueText?'Der Rechnungsbetrag ist bis zum '+dueText+' fällig.':''
   ].filter(Boolean);
   paymentLines.forEach(line=>{
-    const lines=doc.splitTextToSize(line,170);ensureSpace(lines.length*4.8+3);
+    const lines=doc.splitTextToSize(line,160);
+    ensureSpace(lines.length*4.8+3);
     doc.text(lines,left,y);y+=lines.length*4.8+2;
   });
   if(inv.notes){
@@ -1647,8 +1663,13 @@ async function buildInvoicePdf(inv,items){
     doc.setFont('helvetica','normal');const lines=doc.splitTextToSize(String(inv.notes),170);
     ensureSpace(lines.length*4.8);doc.text(lines,left,y);y+=lines.length*4.8+4;
   }
-  ensureSpace(18);y+=5;doc.setFont('helvetica','normal');text('Mit freundlichen Grüßen',left,y);
-  y+=11;doc.setFont('helvetica','bold');text('Thomas Schwetz',left,y);
+
+  // Wie in der Originalrechnung steht die Grußformel auf einer eigenen zweiten Seite.
+  addPage();
+  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(...black);
+  text('Mit freundlichen Grüßen',left,y);
+  y+=5;
+  text('Thomas Schwetz',left,y);
 
   footer();
   return doc.output('blob');
