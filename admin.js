@@ -1288,7 +1288,7 @@ function renderIssuedInvoices(){
   if(!rows.length){issuedInvoiceList.innerHTML='<div class="empty-box">Noch keine eigenen Rechnungen vorhanden. Über „Neue Rechnung“ kannst du einen Entwurf anlegen.</div>';return;}
   issuedInvoiceList.innerHTML=rows.map(inv=>{
     const paidAmount=Number(inv.amount_paid||0), total=Number(inv.total||0);
-    const paymentStatus=inv.status==='cancelled'?'Storniert':inv.status==='draft'?'Entwurf':paidAmount>=total?'Bezahlt':paidAmount>0?'Teilbezahlt':'Offen';
+    const paymentStatus=inv.document_type==='cancellation'?'Stornobeleg':inv.status==='cancelled'?'Storniert':inv.status==='draft'?'Entwurf':paidAmount>=total?'Bezahlt':paidAmount>0?'Teilbezahlt':'Offen';
     const badgeClass=inv.status==='cancelled'?'invoice-status-cancelled':inv.status==='draft'?'invoice-status-draft':paidAmount>=total?'invoice-status-paid':paidAmount>0?'invoice-status-partial':'invoice-status-open';
     const num=inv.invoice_number||'Entwurf';
     const date=inv.invoice_date?formatDate(inv.invoice_date):formatDate(String(inv.created_at||'').slice(0,10));
@@ -1299,7 +1299,7 @@ function renderIssuedInvoices(){
       : (hasPdf?'<button type="button" class="secondary-btn" data-invoice-download="'+inv.id+'" data-kind="pdf">PDF herunterladen</button>':'')+
         (hasXml?'<button type="button" class="secondary-btn" data-invoice-download="'+inv.id+'" data-kind="xrechnung_xml">XRechnung XML</button>':'')+
         '<button type="button" class="secondary-btn" data-invoice-generate-docs="'+inv.id+'">Dokumente (neu) erzeugen</button>'+
-        (inv.status==='issued'?(paidAmount<=0?'<button type="button" class="danger-btn" data-invoice-cancel="'+inv.id+'">Stornieren</button>':'')+'<button type="button" class="secondary-btn" data-invoice-payment="'+inv.id+'">Zahlung erfassen</button>':'');
+        (inv.status==='issued'&&inv.document_type==='invoice'?(paidAmount<=0?'<button type="button" class="danger-btn" data-invoice-cancel="'+inv.id+'">Stornieren</button>':'<button type="button" class="secondary-btn" disabled title="Vor Stornierung erst Zahlung/Rückerstattung klären">Stornierung nach Zahlung klären</button>')+'<button type="button" class="secondary-btn" data-invoice-payment="'+inv.id+'">Zahlung erfassen</button>':'');
     return '<article class="issued-invoice-card"><div class="issued-invoice-top"><div><span class="eyebrow">'+(inv.document_type==='cancellation'?'STORNORECHNUNG':'RECHNUNG')+'</span><h3>'+escapeHtml(num)+'</h3><p>'+escapeHtml(inv.customer_company||inv.customer_name)+' · '+escapeHtml(date)+'</p></div><div class="issued-invoice-amount">'+euro(total)+'</div></div><div class="issued-invoice-meta"><span class="invoice-status '+badgeClass+'">'+paymentStatus+'</span><span>Bezahlt: '+euro(paidAmount)+'</span><span>Offen: '+euro(Math.max(0,total-paidAmount))+'</span></div><div class="issued-invoice-actions">'+actions+'</div>'+(inv.cancellation_invoice_id?'<small>Stornobeleg vorhanden.</small>':'')+'</article>';
   }).join('');
 }
@@ -1310,7 +1310,7 @@ async function createInvoiceDraft(event){
   const orderId=invoiceSourceOrder.value||null, offerId=invoiceSourceOffer.value||null;
   if(orderId&&offerId){invoiceDraftMsg.textContent='Bitte entweder einen Auftrag oder ein Angebot auswählen, nicht beides.';return;}
   const customerName=invoiceField('invoiceCustomerName');
-  const payload={order_id:orderId,offer_id:offerId,customer_name:customerName,customer_company:invoiceField('invoiceCustomerCompany')||null,customer_street:invoiceField('invoiceCustomerStreet'),customer_postal_code:invoiceField('invoiceCustomerZip'),customer_city:invoiceField('invoiceCustomerCity'),customer_email:invoiceField('invoiceCustomerEmail')||null,service_date:invoiceField('invoiceServiceDate')||null,notes:invoiceField('invoiceDraftNotes')||null};
+  const subtotal=rows.reduce((sum,x)=>sum+Math.round(x.quantity*x.unit_price*100)/100,0);\n  const payload={order_id:orderId,offer_id:offerId,customer_name:customerName,customer_company:invoiceField('invoiceCustomerCompany')||null,customer_street:invoiceField('invoiceCustomerStreet'),customer_postal_code:invoiceField('invoiceCustomerZip'),customer_city:invoiceField('invoiceCustomerCity'),customer_email:invoiceField('invoiceCustomerEmail')||null,service_date:invoiceField('invoiceServiceDate')||null,notes:invoiceField('invoiceDraftNotes')||null,subtotal,total:subtotal,tax_total:0};
   const source=orderId?currentOrders.find(x=>x.id===orderId):offerId?currentOffers.find(x=>x.id===offerId):null;
   payload.customer_id=source?.customer_id||null;
   const {data:invoice,error}=await db.from('issued_invoices').insert(payload).select('*').single();
@@ -1329,6 +1329,7 @@ async function openInvoiceDraftFromOrder(orderId){
   invoiceDraftForm.classList.remove('hidden');
   invoiceSourceOrder.value=order.id;
   invoiceSetField('invoiceCustomerName',order.customer_name);
+  invoiceSetField('invoiceCustomerCompany','');invoiceSetField('invoiceCustomerStreet','');invoiceSetField('invoiceCustomerZip','');invoiceSetField('invoiceCustomerCity','');
   invoiceSetField('invoiceCustomerEmail',order.customer_email);
   invoiceSetField('invoiceServiceDate',order.scheduled_date||new Date().toLocaleDateString('sv-SE'));
   const {data:customer}=order.customer_id?await db.from('customers').select('*').eq('id',order.customer_id).maybeSingle():{data:null};
@@ -1359,7 +1360,7 @@ async function onInvoiceSourceOffer(){
   invoiceSourceOrder.value='';
   const offer=currentOffers.find(x=>x.id===id);if(!offer)return;
   invoiceSetField('invoiceCustomerName',offer.kundenname||offer.firma||'');
-  invoiceSetField('invoiceCustomerCompany',offer.firma||'');
+  invoiceSetField('invoiceCustomerCompany',offer.firma||'');invoiceSetField('invoiceCustomerStreet','');invoiceSetField('invoiceCustomerZip','');invoiceSetField('invoiceCustomerCity','');invoiceSetField('invoiceCustomerEmail','');
   invoiceSetField('invoiceServiceDate',new Date().toLocaleDateString('sv-SE'));
   const {data:customer}=offer.customer_id?await db.from('customers').select('*').eq('id',offer.customer_id).maybeSingle():{data:null};
   if(customer){invoiceSetField('invoiceCustomerName',[customer.vorname,customer.nachname].filter(Boolean).join(' ')||customer.firma);invoiceSetField('invoiceCustomerCompany',customer.firma);invoiceSetField('invoiceCustomerStreet',[customer.strasse,customer.hausnummer].filter(Boolean).join(' '));invoiceSetField('invoiceCustomerZip',customer.plz);invoiceSetField('invoiceCustomerCity',customer.ort);invoiceSetField('invoiceCustomerEmail',customer.email);}
