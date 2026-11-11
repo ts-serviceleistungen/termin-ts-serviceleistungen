@@ -1540,20 +1540,20 @@ async function buildInvoicePdf(inv,items){
     for(let p=1;p<=pages;p++){
       doc.setPage(p);
       doc.setFont('helvetica','bold');doc.setFontSize(7);doc.setTextColor(...gold);
-      text(sellerName,left,273);
+      text(sellerName,left,260);
       doc.setFont('helvetica','normal');doc.setFontSize(6.4);
-      text(sellerStreet,left,278);text(sellerPlace,left,283);text('Deutschland',left,288);
+      text(sellerStreet,left,265);text(sellerPlace,left,270);text('Deutschland',left,275);
       doc.setFont('helvetica','bold');doc.setFontSize(6.5);
-      text('KONTAKT',63,273);text('STEUERDATEN',105,273);text('B A N K '+bankName.toUpperCase(),148,273);
+      text('KONTAKT',66,260);text('STEUERDATEN',116,260);text('B A N K '+bankName.toUpperCase(),164,260);
       doc.setFont('helvetica','normal');doc.setFontSize(6.0);
-      text('T E L . '+sellerPhone.replaceAll('/',''),63,278);
-      const emailLines=doc.splitTextToSize('E - M A I L '+sellerEmail,38);doc.text(emailLines,63,283);
-      text('S T E U E R - N R . '+taxNumber,105,278);
-      text('INHABER/-IN',105,283);text('Thomas Schwetz',105,288);
-      text('I B A N '+iban,148,278);
-      text('B I C '+bic,148,283);
+      text('T E L . '+sellerPhone.replaceAll('/',''),66,265);
+      const emailLines=doc.splitTextToSize('E - M A I L '+sellerEmail,43);doc.text(emailLines,66,270);
+      text('S T E U E R - N R . '+taxNumber,116,265);
+      text('INHABER/-IN',116,270);text('Thomas Schwetz',116,275);
+      text('I B A N '+iban,164,265);
+      text('B I C '+bic,164,270);
       doc.setTextColor(...black);doc.setFontSize(7);
-      text(p+'/'+pages,right,290,{align:'right'});
+      text(p+'/'+pages,right,278,{align:'right'});
     }
   };
   const addPage=()=>{
@@ -1570,14 +1570,18 @@ async function buildInvoicePdf(inv,items){
   drawLogo();
   doc.setTextColor(...black);doc.setFont('helvetica','bold');doc.setFontSize(7.5);
   text(sellerName,left,45);
-  doc.setFont('helvetica','bold');doc.setFontSize(7.2);
   const drawArrow=(x,yy)=>{
     doc.setDrawColor(30,30,30);doc.setLineWidth(0.25);
     doc.line(x,yy-0.8,x+3,yy-0.8);
     doc.line(x+1.9,yy-1.8,x+3,yy-0.8);
     doc.line(x+1.9,yy+0.2,x+3,yy-0.8);
   };
-  drawArrow(57,45);text(sellerStreet,63,45);drawArrow(98,45);text(sellerPlace,104,45);
+  let headerX=left+doc.getTextWidth(sellerName)+5;
+  drawArrow(headerX,45);headerX+=7;
+  text(sellerStreet,headerX,45);
+  headerX+=doc.getTextWidth(sellerStreet)+5;
+  drawArrow(headerX,45);headerX+=7;
+  text(sellerPlace,headerX,45);
 
   const previewNumber=String(inv.invoice_number||'ENTWURF');
   const meta=[
@@ -1590,9 +1594,9 @@ async function buildInvoicePdf(inv,items){
   let metaY=45;
   meta.forEach(([label,value])=>{
     doc.setFont('helvetica','normal');doc.setFontSize(6.2);doc.setTextColor(55,55,55);
-    text(label,124,metaY);
+    text(label,134,metaY);
     doc.setFont('helvetica','bold');doc.setFontSize(7.1);doc.setTextColor(...black);
-    doc.text(doc.splitTextToSize(value||'—',48),159,metaY);
+    doc.text(doc.splitTextToSize(value||'—',43),169,metaY);
     metaY+=5.2;
   });
 
@@ -1601,7 +1605,7 @@ async function buildInvoicePdf(inv,items){
   y=53;
   y+=wrapped(recipient,left,y,95,9,4.5);
   if(inv.customer_name&&inv.customer_company)y+=wrapped(inv.customer_name,left,y,95,9,4.5);
-  y+=wrapped(inv.customer_street,left,y,95,9,4.5);
+  y+=wrapped(String(inv.customer_street||'').replace(/,\\s*(\\d)/,' $1'),left,y,95,9,4.5);
   y+=wrapped(recipientLine,left,y,95,9,4.5);
   y+=wrapped('Deutschland',left,y,95,9,4.5);
 
