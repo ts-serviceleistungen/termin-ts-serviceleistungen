@@ -223,6 +223,8 @@ let calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
 let requests=[];let selectedRequest=null;
 let currentOrders=[];
 let orderRequestIds=new Set();
+let currentIssuedInvoices=[];
+let currentInvoiceSettings=null;
 let currentInvoiceTotal=null;
 let currentReceiptTotal=null;
 
@@ -1207,6 +1209,262 @@ async function syncInvoiceCustomers(rows){
   }catch(err){
     console.warn('Kundenübernahme aus Rechnungen fehlgeschlagen:',err.message);
   }
+}
+
+
+function invoiceField(id){return document.getElementById(id)?.value?.trim()||''}
+function invoiceSetField(id,value){const el=document.getElementById(id);if(el)el.value=value??''}
+function addInvoiceItemRow(description='',quantity='1',price='0.00'){
+  const row=document.createElement('div');
+  row.className='invoice-item-row';
+  row.innerHTML='<label>Leistung / Beschreibung<input data-inv-item-description required></label><label>Menge<input data-inv-item-quantity type="number" min="0.001" step="0.001" value="1" required></label><label>Einzelpreis (€)<input data-inv-item-price type="number" min="0" step="0.01" value="0.00" required></label><button type="button" class="danger-btn" data-inv-item-remove aria-label="Position entfernen">×</button>';
+  row.querySelector('[data-inv-item-description]').value=description;
+  row.querySelector('[data-inv-item-quantity]').value=quantity;
+  row.querySelector('[data-inv-item-price]').value=price;
+  invoiceDraftItems?.appendChild(row);
+}
+function resetInvoiceDraft(){
+  invoiceDraftForm?.reset();
+  invoiceSourceOrder.value='';
+  invoiceSourceOffer.value='';
+  invoiceDraftItems.innerHTML='';
+  addInvoiceItemRow();
+  invoiceDraftMsg.textContent='';
+}
+async function loadInvoiceSettings(){
+  const {data,error}=await db.from('invoice_settings').select('*').eq('id',1).maybeSingle();
+  if(error)throw error;
+  currentInvoiceSettings=data;
+  if(!data)return;
+  invoiceSetField('invSellerName',data.seller_name);
+  invoiceSetField('invSellerStreet',data.seller_street);
+  invoiceSetField('invSellerZip',data.seller_postal_code);
+  invoiceSetField('invSellerCity',data.seller_city);
+  invoiceSetField('invSellerEmail',data.seller_email);
+  invoiceSetField('invSellerPhone',data.seller_phone);
+  invoiceSetField('invSellerWebsite',data.seller_website);
+  invoiceSetField('invSellerTaxNumber',data.seller_tax_number);
+  invoiceSetField('invSellerVatId',data.seller_vat_id);
+  invoiceSetField('invSellerBank',data.seller_bank_name);
+  invoiceSetField('invSellerIban',data.seller_iban);
+  invoiceSetField('invSellerBic',data.seller_bic);
+  invoiceSetField('invPaymentDays',data.payment_terms_days??14);
+  invoiceSetField('invPrefix',data.invoice_prefix||'RE');
+  invoiceSetField('invCancelPrefix',data.cancellation_prefix||'ST');
+}
+async function saveInvoiceSettings(event){
+  event.preventDefault();
+  const payload={id:1,seller_name:invoiceField('invSellerName'),seller_street:invoiceField('invSellerStreet'),seller_postal_code:invoiceField('invSellerZip'),seller_city:invoiceField('invSellerCity'),seller_country_code:'DE',seller_email:invoiceField('invSellerEmail'),seller_phone:invoiceField('invSellerPhone'),seller_website:invoiceField('invSellerWebsite'),seller_tax_number:invoiceField('invSellerTaxNumber'),seller_vat_id:invoiceField('invSellerVatId'),seller_bank_name:invoiceField('invSellerBank'),seller_iban:invoiceField('invSellerIban').replace(/\s/g,''),seller_bic:invoiceField('invSellerBic'),payment_terms_days:Number(invoiceField('invPaymentDays')||14),invoice_prefix:invoiceField('invPrefix')||'RE',cancellation_prefix:invoiceField('invCancelPrefix')||'ST',tax_mode:'small_business',updated_at:new Date().toISOString()};
+  if(!payload.seller_name||!payload.seller_street||!payload.seller_postal_code||!payload.seller_city||(!payload.seller_tax_number&&!payload.seller_vat_id)){invoiceSettingsMsg.textContent='Bitte Name, Anschrift und Steuernummer oder USt-IdNr. eintragen.';return;}
+  const {error}=await db.from('invoice_settings').upsert(payload,{onConflict:'id'});
+  if(error){invoiceSettingsMsg.textContent='Speichern fehlgeschlagen: '+error.message;return;}
+  currentInvoiceSettings=payload;
+  invoiceSettingsMsg.textContent='Rechnungseinstellungen gespeichert.';
+}
+function populateInvoiceSources(){
+  if(invoiceSourceOrder)invoiceSourceOrder.innerHTML='<option value="">Kein Auftrag</option>'+currentOrders.map(o=>'<option value="'+escapeHtml(o.id)+'">'+escapeHtml(o.order_number+' · '+o.customer_name+' · '+euro(o.agreed_amount||0))+'</option>').join('');
+  if(invoiceSourceOffer)invoiceSourceOffer.innerHTML='<option value="">Kein Angebot</option>'+currentOffers.map(o=>'<option value="'+escapeHtml(o.id)+'">'+escapeHtml((o.angebotsnummer||'Angebot')+' · '+(o.kundenname||o.firma||'')+' · '+euro(o.betrag||0))+'</option>').join('');
+}
+async function loadIssuedInvoices(){
+  if(!issuedInvoiceList)return;
+  issuedInvoiceList.innerHTML='<p>Neue Rechnungen werden geladen…</p>';
+  try{
+    const {data,error}=await db.from('issued_invoices').select('*,invoice_items(*),invoice_payments(*)').order('created_at',{ascending:false});
+    if(error)throw error;
+    currentIssuedInvoices=data||[];
+    renderIssuedInvoices();
+  }catch(error){issuedInvoiceList.innerHTML='<p class="notice">Neue Rechnungen konnten nicht geladen werden: '+escapeHtml(error.message)+'</p>';}
+}
+function renderIssuedInvoices(){
+  if(!issuedInvoiceList)return;
+  const search=(issuedInvoiceSearch?.value||'').trim().toLowerCase();
+  const rows=currentIssuedInvoices.filter(inv=>[inv.invoice_number,inv.customer_name,inv.customer_company,inv.notes,inv.status].join(' ').toLowerCase().includes(search));
+  const issued=currentIssuedInvoices.filter(x=>x.status!=='draft');
+  const open=issued.filter(x=>x.status==='issued').reduce((s,x)=>s+Math.max(0,Number(x.total||0)-Number(x.amount_paid||0)),0);
+  const paid=issued.reduce((s,x)=>s+Number(x.amount_paid||0),0);
+  issuedInvoiceCount.textContent=String(issued.length);
+  issuedInvoiceOpen.textContent=euro(open);
+  issuedInvoicePaid.textContent=euro(paid);
+  if(!rows.length){issuedInvoiceList.innerHTML='<div class="empty-box">Noch keine eigenen Rechnungen vorhanden. Über „Neue Rechnung“ kannst du einen Entwurf anlegen.</div>';return;}
+  issuedInvoiceList.innerHTML=rows.map(inv=>{
+    const paidAmount=Number(inv.amount_paid||0), total=Number(inv.total||0);
+    const paymentStatus=inv.status==='cancelled'?'Storniert':inv.status==='draft'?'Entwurf':paidAmount>=total?'Bezahlt':paidAmount>0?'Teilbezahlt':'Offen';
+    const badgeClass=inv.status==='cancelled'?'invoice-status-cancelled':inv.status==='draft'?'invoice-status-draft':paidAmount>=total?'invoice-status-paid':paidAmount>0?'invoice-status-partial':'invoice-status-open';
+    const num=inv.invoice_number||'Entwurf';
+    const date=inv.invoice_date?formatDate(inv.invoice_date):formatDate(String(inv.created_at||'').slice(0,10));
+    const actions=inv.status==='draft'
+      ? '<button type="button" class="gold-btn" data-invoice-issue="'+inv.id+'">Rechnung verbindlich ausstellen</button><button type="button" class="danger-btn" data-invoice-delete="'+inv.id+'">Entwurf löschen</button>'
+      : '<button type="button" class="secondary-btn" data-invoice-download="'+inv.id+'" data-kind="pdf">PDF herunterladen</button><button type="button" class="secondary-btn" data-invoice-download="'+inv.id+'" data-kind="xrechnung_xml">XRechnung XML</button>'+
+        (inv.status==='issued'?(paidAmount<=0?'<button type="button" class="danger-btn" data-invoice-cancel="'+inv.id+'">Stornieren</button>':'')+'<button type="button" class="secondary-btn" data-invoice-payment="'+inv.id+'">Zahlung erfassen</button>':'');
+    return '<article class="issued-invoice-card"><div class="issued-invoice-top"><div><span class="eyebrow">'+(inv.document_type==='cancellation'?'STORNORECHNUNG':'RECHNUNG')+'</span><h3>'+escapeHtml(num)+'</h3><p>'+escapeHtml(inv.customer_company||inv.customer_name)+' · '+escapeHtml(date)+'</p></div><div class="issued-invoice-amount">'+euro(total)+'</div></div><div class="issued-invoice-meta"><span class="invoice-status '+badgeClass+'">'+paymentStatus+'</span><span>Bezahlt: '+euro(paidAmount)+'</span><span>Offen: '+euro(Math.max(0,total-paidAmount))+'</span></div><div class="issued-invoice-actions">'+actions+'</div>'+(inv.cancellation_invoice_id?'<small>Stornobeleg vorhanden.</small>':'')+'</article>';
+  }).join('');
+}
+async function createInvoiceDraft(event){
+  event.preventDefault();
+  const rows=[...invoiceDraftItems.querySelectorAll('.invoice-item-row')].map(row=>({description:row.querySelector('[data-inv-item-description]').value.trim(),quantity:Number(row.querySelector('[data-inv-item-quantity]').value),unit_price:Number(row.querySelector('[data-inv-item-price]').value)}));
+  if(!rows.length||rows.some(x=>!x.description||!Number.isFinite(x.quantity)||x.quantity<=0||!Number.isFinite(x.unit_price)||x.unit_price<0)){invoiceDraftMsg.textContent='Bitte alle Rechnungspositionen korrekt ausfüllen.';return;}
+  const orderId=invoiceSourceOrder.value||null, offerId=invoiceSourceOffer.value||null;
+  if(orderId&&offerId){invoiceDraftMsg.textContent='Bitte entweder einen Auftrag oder ein Angebot auswählen, nicht beides.';return;}
+  const customerName=invoiceField('invoiceCustomerName');
+  const payload={order_id:orderId,offer_id:offerId,customer_name:customerName,customer_company:invoiceField('invoiceCustomerCompany')||null,customer_street:invoiceField('invoiceCustomerStreet'),customer_postal_code:invoiceField('invoiceCustomerZip'),customer_city:invoiceField('invoiceCustomerCity'),customer_email:invoiceField('invoiceCustomerEmail')||null,service_date:invoiceField('invoiceServiceDate')||null,notes:invoiceField('invoiceDraftNotes')||null};
+  const source=orderId?currentOrders.find(x=>x.id===orderId):offerId?currentOffers.find(x=>x.id===offerId):null;
+  payload.customer_id=source?.customer_id||null;
+  const {data:invoice,error}=await db.from('issued_invoices').insert(payload).select('*').single();
+  if(error){invoiceDraftMsg.textContent='Entwurf konnte nicht gespeichert werden: '+error.message;return;}
+  const items=rows.map((x,i)=>({...x,invoice_id:invoice.id,position:i+1,unit_code:'C62'}));
+  const {error:itemError}=await db.from('invoice_items').insert(items);
+  if(itemError){await db.from('issued_invoices').delete().eq('id',invoice.id);invoiceDraftMsg.textContent='Positionen konnten nicht gespeichert werden: '+itemError.message;return;}
+  invoiceDraftForm.classList.add('hidden');
+  resetInvoiceDraft();
+  await loadIssuedInvoices();
+  alert('Rechnungsentwurf wurde gespeichert. Vor der Ausstellung bitte Firmendaten und Kundenanschrift prüfen.');
+}
+async function openInvoiceDraftFromOrder(orderId){
+  const order=currentOrders.find(x=>x.id===orderId);if(!order)return;
+  resetInvoiceDraft();
+  invoiceDraftForm.classList.remove('hidden');
+  invoiceSourceOrder.value=order.id;
+  invoiceSetField('invoiceCustomerName',order.customer_name);
+  invoiceSetField('invoiceCustomerEmail',order.customer_email);
+  invoiceSetField('invoiceServiceDate',order.scheduled_date||new Date().toLocaleDateString('sv-SE'));
+  const {data:customer}=order.customer_id?await db.from('customers').select('*').eq('id',order.customer_id).maybeSingle():{data:null};
+  if(customer){
+    invoiceSetField('invoiceCustomerCompany',customer.firma);
+    invoiceSetField('invoiceCustomerStreet',[customer.strasse,customer.hausnummer].filter(Boolean).join(' '));
+    invoiceSetField('invoiceCustomerZip',customer.plz);
+    invoiceSetField('invoiceCustomerCity',customer.ort);
+    invoiceSetField('invoiceCustomerEmail',customer.email||order.customer_email);
+  }
+  invoiceDraftItems.innerHTML='';
+  addInvoiceItemRow(order.description||order.service_type,'1',Number(order.agreed_amount||0).toFixed(2));
+  invoiceDraftForm.scrollIntoView({behavior:'smooth',block:'start'});
+}
+async function onInvoiceSourceOrder(){
+  const id=invoiceSourceOrder.value;if(!id)return;
+  invoiceSourceOffer.value='';
+  const order=currentOrders.find(x=>x.id===id);if(!order)return;
+  invoiceSetField('invoiceCustomerName',order.customer_name);
+  invoiceSetField('invoiceCustomerEmail',order.customer_email);
+  invoiceSetField('invoiceServiceDate',order.scheduled_date||new Date().toLocaleDateString('sv-SE'));
+  const {data:customer}=order.customer_id?await db.from('customers').select('*').eq('id',order.customer_id).maybeSingle():{data:null};
+  if(customer){invoiceSetField('invoiceCustomerCompany',customer.firma);invoiceSetField('invoiceCustomerStreet',[customer.strasse,customer.hausnummer].filter(Boolean).join(' '));invoiceSetField('invoiceCustomerZip',customer.plz);invoiceSetField('invoiceCustomerCity',customer.ort);}
+  invoiceDraftItems.innerHTML='';addInvoiceItemRow(order.description||order.service_type,'1',Number(order.agreed_amount||0).toFixed(2));
+}
+async function onInvoiceSourceOffer(){
+  const id=invoiceSourceOffer.value;if(!id)return;
+  invoiceSourceOrder.value='';
+  const offer=currentOffers.find(x=>x.id===id);if(!offer)return;
+  invoiceSetField('invoiceCustomerName',offer.kundenname||offer.firma||'');
+  invoiceSetField('invoiceCustomerCompany',offer.firma||'');
+  invoiceSetField('invoiceServiceDate',new Date().toLocaleDateString('sv-SE'));
+  const {data:customer}=offer.customer_id?await db.from('customers').select('*').eq('id',offer.customer_id).maybeSingle():{data:null};
+  if(customer){invoiceSetField('invoiceCustomerName',[customer.vorname,customer.nachname].filter(Boolean).join(' ')||customer.firma);invoiceSetField('invoiceCustomerCompany',customer.firma);invoiceSetField('invoiceCustomerStreet',[customer.strasse,customer.hausnummer].filter(Boolean).join(' '));invoiceSetField('invoiceCustomerZip',customer.plz);invoiceSetField('invoiceCustomerCity',customer.ort);invoiceSetField('invoiceCustomerEmail',customer.email);}
+  invoiceDraftItems.innerHTML='';addInvoiceItemRow(offer.beschreibung||'Leistung gemäß Angebot '+(offer.angebotsnummer||''),'1',Number(offer.betrag||0).toFixed(2));
+}
+function xmlEscape(v){return String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'","&apos;")}
+function buildXRechnungXml(inv,items){
+  const s=inv.seller_snapshot||currentInvoiceSettings||{};
+  const buyerName=inv.customer_company||inv.customer_name;
+  const sellerTax=s.vat_id?'<cac:PartyTaxScheme><cbc:CompanyID>'+xmlEscape(s.vat_id)+'</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>':'<cac:PartyTaxScheme><cbc:CompanyID>'+xmlEscape(s.tax_number)+'</cbc:CompanyID><cac:TaxScheme><cbc:ID>FC</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>';
+  const party=(name,street,zip,city,country,email,tax='')=>'<cac:Party><cac:PartyName><cbc:Name>'+xmlEscape(name)+'</cbc:Name></cac:PartyName><cac:PostalAddress><cbc:StreetName>'+xmlEscape(street)+'</cbc:StreetName><cbc:CityName>'+xmlEscape(city)+'</cbc:CityName><cbc:PostalZone>'+xmlEscape(zip)+'</cbc:PostalZone><cac:Country><cbc:IdentificationCode>'+xmlEscape(country||'DE')+'</cbc:IdentificationCode></cac:Country></cac:PostalAddress>'+(email?'<cac:Contact><cbc:ElectronicMail>'+xmlEscape(email)+'</cbc:ElectronicMail></cac:Contact>':'')+tax+'</cac:Party>';
+  const total=Math.abs(Number(inv.total||0)).toFixed(2), sub=Math.abs(Number(inv.subtotal||0)).toFixed(2);
+  const isCredit=inv.document_type==='cancellation';
+  const lineXml=items.map((it,i)=>{
+    const line=Math.abs(Number(it.line_total||Number(it.quantity)*Number(it.unit_price))).toFixed(2);
+    const qty=Math.abs(Number(it.quantity||1));
+    const taxCat='<cac:ClassifiedTaxCategory><cbc:ID>E</cbc:ID><cbc:Percent>0</cbc:Percent><cbc:TaxExemptionReason>Steuerbefreiung für Kleinunternehmer gemäß § 19 UStG</cbc:TaxExemptionReason><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:ClassifiedTaxCategory>';
+    return isCredit?'<cac:CreditNoteLine><cbc:ID>'+(i+1)+'</cbc:ID><cbc:CreditedQuantity unitCode="'+xmlEscape(it.unit_code||'C62')+'">'+qty+'</cbc:CreditedQuantity><cbc:LineExtensionAmount currencyID="EUR">'+line+'</cbc:LineExtensionAmount><cac:Item><cbc:Name>'+xmlEscape(it.description)+'</cbc:Name>'+taxCat+'</cac:Item><cac:Price><cbc:PriceAmount currencyID="EUR">'+Number(it.unit_price||0).toFixed(2)+'</cbc:PriceAmount></cac:Price></cac:CreditNoteLine>':'<cac:InvoiceLine><cbc:ID>'+(i+1)+'</cbc:ID><cbc:InvoicedQuantity unitCode="'+xmlEscape(it.unit_code||'C62')+'">'+qty+'</cbc:InvoicedQuantity><cbc:LineExtensionAmount currencyID="EUR">'+line+'</cbc:LineExtensionAmount><cac:Item><cbc:Name>'+xmlEscape(it.description)+'</cbc:Name>'+taxCat+'</cac:Item><cac:Price><cbc:PriceAmount currencyID="EUR">'+Number(it.unit_price||0).toFixed(2)+'</cbc:PriceAmount></cac:Price></cac:InvoiceLine>';
+  }).join('');
+  const root=isCredit?'CreditNote':'Invoice';
+  const type=isCredit?'<cbc:CreditNoteTypeCode>381</cbc:CreditNoteTypeCode>':'<cbc:InvoiceTypeCode>380</cbc:InvoiceTypeCode>';
+  const lines=isCredit?'<cac:CreditNoteLine>':'<cac:InvoiceLine>';
+  const ref=isCredit&&inv.original_invoice_id?'<cac:BillingReference><cac:InvoiceDocumentReference><cbc:ID>'+xmlEscape(currentIssuedInvoices.find(x=>x.id===inv.original_invoice_id)?.invoice_number||'')+'</cbc:ID></cac:InvoiceDocumentReference></cac:BillingReference>':'';
+  return '<?xml version="1.0" encoding="UTF-8"?>\n<'+root+' xmlns="urn:oasis:names:specification:ubl:schema:xsd:'+root+'-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"><cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0</cbc:CustomizationID><cbc:ProfileID>urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</cbc:ProfileID><cbc:ID>'+xmlEscape(inv.invoice_number)+'</cbc:ID><cbc:IssueDate>'+xmlEscape(inv.invoice_date)+'</cbc:IssueDate>'+type+(inv.due_date?'<cbc:DueDate>'+xmlEscape(inv.due_date)+'</cbc:DueDate>':'')+'<cbc:DocumentCurrencyCode>EUR</cbc:DocumentCurrencyCode>'+ref+'<cac:AccountingSupplierParty>'+party(s.name,s.street,s.postal_code,s.city,s.country_code,s.email,sellerTax)+'</cac:AccountingSupplierParty><cac:AccountingCustomerParty>'+party(buyerName,inv.customer_street,inv.customer_postal_code,inv.customer_city,inv.customer_country_code,inv.customer_email,inv.customer_vat_id?'<cac:PartyTaxScheme><cbc:CompanyID>'+xmlEscape(inv.customer_vat_id)+'</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>':'')+'</cac:AccountingCustomerParty><cac:PaymentMeans><cbc:PaymentMeansCode>58</cbc:PaymentMeansCode>'+(s.iban?'<cac:PayeeFinancialAccount><cbc:ID>'+xmlEscape(s.iban)+'</cbc:ID>'+(s.bank_name?'<cbc:Name>'+xmlEscape(s.bank_name)+'</cbc:Name>':'')+'</cac:PayeeFinancialAccount>':'')+'</cac:PaymentMeans><cac:TaxTotal><cbc:TaxAmount currencyID="EUR">0.00</cbc:TaxAmount><cac:TaxSubtotal><cbc:TaxableAmount currencyID="EUR">'+sub+'</cbc:TaxableAmount><cbc:TaxAmount currencyID="EUR">0.00</cbc:TaxAmount><cac:TaxCategory><cbc:ID>E</cbc:ID><cbc:Percent>0</cbc:Percent><cbc:TaxExemptionReason>Steuerbefreiung für Kleinunternehmer gemäß § 19 UStG</cbc:TaxExemptionReason><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:TaxCategory></cac:TaxSubtotal></cac:TaxTotal><cac:LegalMonetaryTotal><cbc:LineExtensionAmount currencyID="EUR">'+sub+'</cbc:LineExtensionAmount><cbc:TaxExclusiveAmount currencyID="EUR">'+sub+'</cbc:TaxExclusiveAmount><cbc:TaxInclusiveAmount currencyID="EUR">'+total+'</cbc:TaxInclusiveAmount><cbc:PayableAmount currencyID="EUR">'+total+'</cbc:PayableAmount></cac:LegalMonetaryTotal>'+lineXml+'</'+root+'>';
+}
+function buildInvoicePdf(inv,items){
+  if(!window.jspdf?.jsPDF)throw new Error('PDF-Bibliothek konnte nicht geladen werden. Bitte Seite neu laden.');
+  const {jsPDF}=window.jspdf;const doc=new jsPDF({unit:'mm',format:'a4'});const s=inv.seller_snapshot||currentInvoiceSettings||{};
+  let y=18;doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text(String(s.name||''),20,y);y+=5;doc.text(String(s.street||''),20,y);y+=5;doc.text(String((s.postal_code||'')+' '+(s.city||'')),20,y);
+  doc.setFontSize(20);doc.setFont('helvetica','bold');doc.text(inv.document_type==='cancellation'?'Stornorechnung':'Rechnung',20,62);
+  doc.setFontSize(10);doc.setFont('helvetica','normal');doc.text('Rechnungsnummer: '+String(inv.invoice_number||''),20,72);doc.text('Rechnungsdatum: '+formatDate(inv.invoice_date),20,78);doc.text('Leistungsdatum: '+formatDate(inv.service_date),20,84);
+  doc.setFont('helvetica','bold');doc.text(String(inv.customer_company||inv.customer_name||''),125,38);doc.setFont('helvetica','normal');doc.text(String(inv.customer_name||''),125,44);doc.text(String(inv.customer_street||''),125,50);doc.text(String((inv.customer_postal_code||'')+' '+(inv.customer_city||'')),125,56);
+  y=100;doc.setFont('helvetica','bold');doc.text('Leistung',20,y);doc.text('Menge',125,y);doc.text('Einzelpreis',150,y,{align:'right'});doc.text('Gesamt',190,y,{align:'right'});doc.line(20,y+2,190,y+2);y+=10;doc.setFont('helvetica','normal');
+  items.forEach(it=>{const desc=doc.splitTextToSize(String(it.description||''),95);doc.text(desc,20,y);doc.text(String(it.quantity||1),125,y);doc.text(euro(it.unit_price||0),150,y,{align:'right'});doc.text(euro(Math.abs(Number(it.line_total||Number(it.quantity)*Number(it.unit_price)))),190,y,{align:'right'});y+=Math.max(7,desc.length*5);if(y>245){doc.addPage();y=20;}});
+  y+=8;doc.line(125,y,190,y);y+=8;doc.setFont('helvetica','bold');doc.text('Gesamtbetrag: '+euro(Math.abs(Number(inv.total||0))),190,y,{align:'right'});
+  y+=15;doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text(String(inv.tax_note||'Steuerbefreiung für Kleinunternehmer gemäß § 19 UStG.'),20,y);y+=8;
+  if(inv.due_date)doc.text('Zahlbar bis: '+formatDate(inv.due_date),20,y);
+  y+=10;if(s.iban)doc.text('IBAN: '+String(s.iban),20,y);if(s.bank_name)doc.text('Bank: '+String(s.bank_name),20,y+5);
+  if(inv.document_type==='cancellation')doc.text('Stornogrund: '+String(inv.cancellation_reason||''),20,270);
+  return doc.output('blob');
+}
+async function createInvoiceFiles(inv){
+  const {data:items,error:itemError}=await db.from('invoice_items').select('*').eq('invoice_id',inv.id).order('position');
+  if(itemError)throw itemError;
+  const pdfBlob=buildInvoicePdf(inv,items||[]);
+  const xml=buildXRechnungXml(inv,items||[]);
+  const xmlBlob=new Blob([xml],{type:'application/xml;charset=utf-8'});
+  const base=(inv.invoice_number||inv.id).replace(/[^A-Za-z0-9_-]/g,'_');
+  const docs=[{kind:'pdf',file:new File([pdfBlob],base+'.pdf',{type:'application/pdf'}),mime:'application/pdf'},{kind:'xrechnung_xml',file:new File([xmlBlob],base+'.xml',{type:'application/xml'}),mime:'application/xml'}];
+  for(const d of docs){
+    const path=new Date().getFullYear()+'/'+base+'/'+d.file.name;
+    const {error:uploadError}=await db.storage.from('issued-invoices').upload(path,d.file,{upsert:true,contentType:d.mime});
+    if(uploadError)throw uploadError;
+    const digest=await crypto.subtle.digest('SHA-256',await d.file.arrayBuffer());
+    const hash=[...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,'0')).join('');
+    const {error:docError}=await db.from('invoice_documents').upsert({invoice_id:inv.id,document_kind:d.kind,storage_path:path,file_name:d.file.name,mime_type:d.mime,sha256:hash},{onConflict:'invoice_id,document_kind'});
+    if(docError)throw docError;
+  }
+}
+async function issueInvoice(id){
+  const inv=currentIssuedInvoices.find(x=>x.id===id);if(!inv)return;
+  if(!confirm('Rechnung verbindlich ausstellen? Die Rechnungsnummer wird endgültig vergeben.'))return;
+  try{
+    const {data,error}=await db.rpc('issue_invoice',{p_invoice_id:id});if(error)throw error;
+    await createInvoiceFiles(data);
+    await loadIssuedInvoices();
+    alert('Rechnung '+data.invoice_number+' wurde ausgestellt. PDF und XRechnung wurden archiviert.');
+  }catch(error){alert('Rechnung wurde nicht vollständig erstellt: '+error.message+'\\nFalls bereits eine Rechnungsnummer vergeben wurde, bitte die Rechnung neu laden und die Dokumente erneut erzeugen.');await loadIssuedInvoices();}
+}
+async function deleteInvoiceDraft(id){
+  const inv=currentIssuedInvoices.find(x=>x.id===id);if(!inv||inv.status!=='draft')return;
+  if(!confirm('Diesen Rechnungsentwurf endgültig löschen?'))return;
+  const {error}=await db.from('issued_invoices').delete().eq('id',id);
+  if(error){alert('Entwurf konnte nicht gelöscht werden: '+error.message);return;}
+  await loadIssuedInvoices();
+}
+async function cancelInvoice(id){
+  const reason=prompt('Bitte Stornogrund eingeben:');if(!reason?.trim())return;
+  if(!confirm('Eine Stornorechnung wird erstellt. Die ursprüngliche Rechnung bleibt archiviert. Fortfahren?'))return;
+  try{
+    const {data,error}=await db.rpc('cancel_issued_invoice',{p_invoice_id:id,p_reason:reason.trim()});if(error)throw error;
+    await createInvoiceFiles(data);
+    await loadIssuedInvoices();
+    alert('Stornorechnung '+data.invoice_number+' wurde erstellt und archiviert.');
+  }catch(error){alert('Stornierung nicht möglich: '+error.message);await loadIssuedInvoices();}
+}
+async function addInvoicePayment(id){
+  const inv=currentIssuedInvoices.find(x=>x.id===id);if(!inv)return;
+  const amountRaw=prompt('Zahlungseingang in Euro. Noch offen: '+euro(Math.max(0,Number(inv.total||0)-Number(inv.amount_paid||0))));if(amountRaw===null)return;
+  const amount=Number(amountRaw.replace(',','.'));
+  if(!Number.isFinite(amount)||amount<=0){alert('Bitte einen gültigen positiven Betrag eingeben.');return;}
+  const methodRaw=prompt('Zahlungsart: Überweisung, Bar, Karte oder Sonstiges','Überweisung')||'Überweisung';
+  const map={'Überweisung':'bank_transfer','Bar':'cash','Karte':'card','Sonstiges':'other'};
+  const {error}=await db.from('invoice_payments').insert({invoice_id:id,amount,payment_method:map[methodRaw]||'other',payment_date:new Date().toLocaleDateString('sv-SE')});
+  if(error){alert('Zahlung konnte nicht gespeichert werden: '+error.message);return;}
+  await loadIssuedInvoices();
+}
+async function downloadInvoiceDocument(id,kind){
+  const {data:doc,error}=await db.from('invoice_documents').select('*').eq('invoice_id',id).eq('document_kind',kind).maybeSingle();
+  if(error){alert('Dokumentdaten konnten nicht geladen werden: '+error.message);return;}
+  if(!doc){alert('Das Dokument ist noch nicht archiviert. Bitte Rechnung neu laden oder Support kontaktieren.');return;}
+  const {data,error:downloadError}=await db.storage.from('issued-invoices').download(doc.storage_path);
+  if(downloadError){alert('Download fehlgeschlagen: '+downloadError.message);return;}
+  const url=URL.createObjectURL(data);const a=document.createElement('a');a.href=url;a.download=doc.file_name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
+async function ensureInvoiceSources(){
+  if(!currentOrders.length)await loadOrders();
+  if(!currentOffers.length)await loadOffers(false);
+  populateInvoiceSources();
 }
 
 async function loadInvoices(){
