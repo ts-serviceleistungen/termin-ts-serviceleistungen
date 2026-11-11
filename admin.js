@@ -69,6 +69,36 @@ const orderInProgressCountEl = document.getElementById('orderInProgressCount');
 const orderCompletedCountEl = document.getElementById('orderCompletedCount');
 const receiptsView = document.getElementById('receiptsView');
 const invoicesView = document.getElementById('invoicesView');
+const invoiceDraftForm = document.getElementById('invoiceDraftForm');
+const invoiceDraftId = document.getElementById('invoiceDraftId');
+const invoiceDraftItems = document.getElementById('invoiceDraftItems');
+const invoiceDraftMsg = document.getElementById('invoiceDraftMsg');
+const invoiceSettingsForm = document.getElementById('invoiceSettingsForm');
+const invoiceNewBtn = document.getElementById('invoiceNewBtn');
+const invoiceAddItemBtn = document.getElementById('invoiceAddItemBtn');
+const invoiceDraftCancelBtn = document.getElementById('invoiceDraftCancelBtn');
+const invoicePreviewBtn = document.getElementById('invoicePreviewBtn');
+const invoiceSourceOrder = document.getElementById('invoiceSourceOrder');
+const invoiceSourceOffer = document.getElementById('invoiceSourceOffer');
+const issuedInvoiceList = document.getElementById('issuedInvoiceList');
+const issuedInvoiceSearch = document.getElementById('issuedInvoiceSearch');
+const issuedInvoiceCount = document.getElementById('issuedInvoiceCount');
+const issuedInvoiceOpen = document.getElementById('issuedInvoiceOpen');
+const issuedInvoicePaid = document.getElementById('issuedInvoicePaid');
+const invoicePreviewModal = document.getElementById('invoicePreviewModal');
+const invoicePreviewFrame = document.getElementById('invoicePreviewFrame');
+const invoicePreviewMeta = document.getElementById('invoicePreviewMeta');
+const invoicePreviewClose = document.getElementById('invoicePreviewClose');
+const invoicePreviewEdit = document.getElementById('invoicePreviewEdit');
+const invoicePreviewDownload = document.getElementById('invoicePreviewDownload');
+const invoicePreviewPrint = document.getElementById('invoicePreviewPrint');
+const invoicePreviewIssue = document.getElementById('invoicePreviewIssue');
+const invoicePreviewZoomIn = document.getElementById('invoicePreviewZoomIn');
+const invoicePreviewZoomOut = document.getElementById('invoicePreviewZoomOut');
+const invoicePreviewZoomLabel = document.getElementById('invoicePreviewZoomLabel');
+let currentInvoicePreviewUrl=null;
+let currentInvoicePreviewId=null;
+let currentInvoicePreviewZoom=100;
 const offersView = document.getElementById('offersView');
 const customersView = document.getElementById('customersView');
 const existingCustomersView = document.getElementById('existingCustomersView');
@@ -1297,7 +1327,7 @@ function renderIssuedInvoices(){
     const hasPdf=(inv.invoice_documents||[]).some(d=>d.document_kind==='pdf');
     const hasXml=(inv.invoice_documents||[]).some(d=>d.document_kind==='xrechnung_xml');
     const actions=inv.status==='draft'
-      ? '<button type="button" class="secondary-btn" data-invoice-edit="'+inv.id+'">Entwurf bearbeiten</button><button type="button" class="gold-btn" data-invoice-issue="'+inv.id+'">Rechnung verbindlich ausstellen</button><button type="button" class="danger-btn" data-invoice-delete="'+inv.id+'">Entwurf löschen</button>'
+      ? '<button type="button" class="secondary-btn" data-invoice-edit="'+inv.id+'">Entwurf bearbeiten</button><button type="button" class="gold-btn" data-invoice-preview="'+inv.id+'">Vorschau / Freigabe</button><button type="button" class="danger-btn" data-invoice-delete="'+inv.id+'">Entwurf löschen</button>'
       : (hasPdf?'<button type="button" class="secondary-btn" data-invoice-download="'+inv.id+'" data-kind="pdf">PDF herunterladen</button>':'')+
         (hasXml?'<button type="button" class="secondary-btn" data-invoice-download="'+inv.id+'" data-kind="xrechnung_xml">XRechnung XML</button>':'')+
         '<button type="button" class="secondary-btn" data-invoice-generate-docs="'+inv.id+'">Dokumente (neu) erzeugen</button>'+
@@ -1305,8 +1335,8 @@ function renderIssuedInvoices(){
     return '<article class="issued-invoice-card"><div class="issued-invoice-top"><div><span class="eyebrow">'+(inv.document_type==='cancellation'?'STORNORECHNUNG':'RECHNUNG')+'</span><h3>'+escapeHtml(num)+'</h3><p>'+escapeHtml(inv.customer_company||inv.customer_name)+' · '+escapeHtml(date)+'</p></div><div class="issued-invoice-amount">'+euro(total)+'</div></div><div class="issued-invoice-meta"><span class="invoice-status '+badgeClass+'">'+paymentStatus+'</span><span>Bezahlt: '+euro(paidAmount)+'</span><span>Offen: '+euro(Math.max(0,total-paidAmount))+'</span></div><div class="issued-invoice-actions">'+actions+'</div>'+(inv.cancellation_invoice_id?'<small>Stornobeleg vorhanden.</small>':'')+'</article>';
   }).join('');
 }
-async function createInvoiceDraft(event){
-  event.preventDefault();
+async function createInvoiceDraft(event,options={}){
+  event?.preventDefault();
   const rows=[...invoiceDraftItems.querySelectorAll('.invoice-item-row')].map(row=>({description:row.querySelector('[data-inv-item-description]').value.trim(),quantity:Number(row.querySelector('[data-inv-item-quantity]').value),unit_price:Number(row.querySelector('[data-inv-item-price]').value)}));
   if(!rows.length||rows.some(x=>!x.description||!Number.isFinite(x.quantity)||x.quantity<=0||!Number.isFinite(x.unit_price)||x.unit_price<0)){invoiceDraftMsg.textContent='Bitte alle Rechnungspositionen korrekt ausfüllen.';return;}
   const orderId=invoiceSourceOrder.value||null, offerId=invoiceSourceOffer.value||null;
@@ -1330,10 +1360,17 @@ async function createInvoiceDraft(event){
   const items=rows.map((x,i)=>({...x,invoice_id:invoice.id,position:i+1,unit_code:'C62'}));
   const {error:itemError}=await db.from('invoice_items').insert(items);
   if(itemError){invoiceDraftMsg.textContent='Positionen konnten nicht gespeichert werden: '+itemError.message;return;}
+  const shouldPreview=options.preview===true;
   invoiceDraftForm.classList.add('hidden');
-  resetInvoiceDraft();
   await loadIssuedInvoices();
-  alert('Rechnungsentwurf wurde gespeichert. Vor der Ausstellung bitte Firmendaten und Kundenanschrift prüfen.');
+  if(shouldPreview){
+    const saved=currentIssuedInvoices.find(x=>x.id===invoice.id);
+    if(saved)await openInvoicePreview(saved);
+    else invoiceDraftMsg.textContent='Entwurf gespeichert, konnte aber für die Vorschau nicht neu geladen werden.';
+  }else{
+    resetInvoiceDraft();
+    alert('Rechnungsentwurf wurde gespeichert. Vor der Ausstellung bitte Firmendaten und Kundenanschrift prüfen.');
+  }
 }
 async function openInvoiceDraftFromOrder(orderId){
   const order=currentOrders.find(x=>x.id===orderId);if(!order)return;
@@ -1442,10 +1479,62 @@ async function createInvoiceFiles(inv){
     if(docError)throw docError;
   }
 }
+
+function closeInvoicePreview(){
+  invoicePreviewModal?.classList.add('hidden');
+  if(invoicePreviewFrame)invoicePreviewFrame.src='about:blank';
+  if(currentInvoicePreviewUrl){URL.revokeObjectURL(currentInvoicePreviewUrl);currentInvoicePreviewUrl=null;}
+  currentInvoicePreviewId=null;
+}
+async function openInvoicePreview(inv){
+  if(!inv)return;
+  try{
+    const items=Array.isArray(inv.invoice_items)?inv.invoice_items:[];
+    if(!items.length)throw new Error('Die Rechnung enthält noch keine Positionen.');
+    if(!currentInvoiceSettings)await loadInvoiceSettings();
+    if(!currentInvoiceSettings?.seller_name||!currentInvoiceSettings?.seller_street||!currentInvoiceSettings?.seller_postal_code||!currentInvoiceSettings?.seller_city){
+      throw new Error('Bitte zuerst unter „Rechnungseinstellungen“ die Firmendaten vollständig hinterlegen.');
+    }
+    const previewInvoice={
+      ...inv,
+      invoice_number:inv.invoice_number||'VORSCHAU – noch keine Rechnungsnummer',
+      invoice_date:inv.invoice_date||new Date().toLocaleDateString('sv-SE'),
+      due_date:inv.due_date||new Date(Date.now()+Number(currentInvoiceSettings.payment_terms_days||7)*86400000).toLocaleDateString('sv-SE'),
+      seller_snapshot:{
+        name:currentInvoiceSettings.seller_name,contact_name:currentInvoiceSettings.seller_contact_name,
+        street:currentInvoiceSettings.seller_street,postal_code:currentInvoiceSettings.seller_postal_code,
+        city:currentInvoiceSettings.seller_city,country_code:currentInvoiceSettings.seller_country_code||'DE',
+        email:currentInvoiceSettings.seller_email,phone:currentInvoiceSettings.seller_phone,
+        website:currentInvoiceSettings.seller_website,tax_number:currentInvoiceSettings.seller_tax_number,
+        vat_id:currentInvoiceSettings.seller_vat_id,bank_name:currentInvoiceSettings.seller_bank_name,
+        iban:currentInvoiceSettings.seller_iban,bic:currentInvoiceSettings.seller_bic
+      },
+      tax_note:'Umsatzsteuer nicht erhoben gemäß § 19 UStG.'
+    };
+    const blob=buildInvoicePdf(previewInvoice,items);
+    if(currentInvoicePreviewUrl)URL.revokeObjectURL(currentInvoicePreviewUrl);
+    currentInvoicePreviewUrl=URL.createObjectURL(blob);
+    currentInvoicePreviewId=inv.id;
+    currentInvoicePreviewZoom=100;
+    invoicePreviewZoomLabel.textContent='100 %';
+    invoicePreviewFrame.style.transform='none';
+    invoicePreviewFrame.src=currentInvoicePreviewUrl+'#toolbar=1&navpanes=1&view=FitH';
+    invoicePreviewMeta.textContent=(inv.invoice_number||'Entwurf ohne Rechnungsnummer')+' · '+(inv.customer_company||inv.customer_name||'Kunde')+' · '+euro(inv.total||0)+' · noch nicht verbindlich ausgestellt';
+    invoicePreviewIssue.disabled=inv.status!=='draft';
+    invoicePreviewIssue.textContent=inv.status==='draft'?'Jetzt verbindlich ausstellen':'Bereits ausgestellt';
+    invoicePreviewModal.classList.remove('hidden');
+  }catch(error){alert('Vorschau konnte nicht erstellt werden: '+error.message);}
+}
+function downloadCurrentInvoicePreview(){
+  if(!currentInvoicePreviewUrl)return;
+  const a=document.createElement('a');a.href=currentInvoicePreviewUrl;a.download='Rechnung-Vorschau.pdf';document.body.appendChild(a);a.click();a.remove();
+}
+
 async function issueInvoice(id){
   const inv=currentIssuedInvoices.find(x=>x.id===id);if(!inv)return;
   if(!confirm('Rechnung verbindlich ausstellen? Die Rechnungsnummer wird endgültig vergeben.'))return;
   try{
+    closeInvoicePreview();
     const {data,error}=await db.rpc('issue_invoice',{p_invoice_id:id});if(error)throw error;
     const issued=Array.isArray(data)?data[0]:data;
     await createInvoiceFiles(issued);
@@ -2392,8 +2481,17 @@ ordersView?.addEventListener('click',async e=>{const invoice=e.target.closest('[
 
 invoiceSettingsForm?.addEventListener('submit',saveInvoiceSettings);
 invoiceDraftForm?.addEventListener('submit',createInvoiceDraft);
+invoicePreviewBtn?.addEventListener('click',()=>createInvoiceDraft(null,{preview:true}));
 invoiceNewBtn?.addEventListener('click',async()=>{resetInvoiceDraft();invoiceDraftForm.classList.remove('hidden');invoiceSetField('invoiceServiceDate',new Date().toLocaleDateString('sv-SE'));await ensureInvoiceSources();invoiceDraftForm.scrollIntoView({behavior:'smooth',block:'start'});});
 invoiceDraftCancelBtn?.addEventListener('click',()=>invoiceDraftForm.classList.add('hidden'));
+invoicePreviewClose?.addEventListener('click',closeInvoicePreview);
+invoicePreviewEdit?.addEventListener('click',()=>{const id=currentInvoicePreviewId;closeInvoicePreview();if(id)editInvoiceDraft(id);});
+invoicePreviewDownload?.addEventListener('click',downloadCurrentInvoicePreview);
+invoicePreviewPrint?.addEventListener('click',()=>{if(currentInvoicePreviewUrl){const w=window.open(currentInvoicePreviewUrl,'_blank');if(w)w.addEventListener('load',()=>w.print(),{once:true});}});
+invoicePreviewIssue?.addEventListener('click',()=>{if(currentInvoicePreviewId)issueInvoice(currentInvoicePreviewId);});
+invoicePreviewZoomIn?.addEventListener('click',()=>{currentInvoicePreviewZoom=Math.min(160,currentInvoicePreviewZoom+10);invoicePreviewZoomLabel.textContent=currentInvoicePreviewZoom+' %';invoicePreviewFrame.style.transform='scale('+(currentInvoicePreviewZoom/100)+')';invoicePreviewFrame.style.transformOrigin='top center';});
+invoicePreviewZoomOut?.addEventListener('click',()=>{currentInvoicePreviewZoom=Math.max(70,currentInvoicePreviewZoom-10);invoicePreviewZoomLabel.textContent=currentInvoicePreviewZoom+' %';invoicePreviewFrame.style.transform='scale('+(currentInvoicePreviewZoom/100)+')';invoicePreviewFrame.style.transformOrigin='top center';});
+invoicePreviewModal?.addEventListener('click',e=>{if(e.target===invoicePreviewModal)closeInvoicePreview();});
 invoiceAddItemBtn?.addEventListener('click',()=>addInvoiceItemRow());
 invoiceDraftItems?.addEventListener('click',e=>{const b=e.target.closest('[data-inv-item-remove]');if(b){b.closest('.invoice-item-row')?.remove();if(!invoiceDraftItems.querySelector('.invoice-item-row'))addInvoiceItemRow();}});
 invoiceSourceOrder?.addEventListener('change',onInvoiceSourceOrder);
@@ -2401,6 +2499,7 @@ invoiceSourceOffer?.addEventListener('change',onInvoiceSourceOffer);
 issuedInvoiceSearch?.addEventListener('input',renderIssuedInvoices);
 issuedInvoiceList?.addEventListener('click',async e=>{
   const edit=e.target.closest('[data-invoice-edit]');if(edit)return editInvoiceDraft(edit.dataset.invoiceEdit);
+  const preview=e.target.closest('[data-invoice-preview]');if(preview){const inv=currentIssuedInvoices.find(x=>x.id===preview.dataset.invoicePreview);return openInvoicePreview(inv);}
   const issue=e.target.closest('[data-invoice-issue]');if(issue)return issueInvoice(issue.dataset.invoiceIssue);
   const del=e.target.closest('[data-invoice-delete]');if(del)return deleteInvoiceDraft(del.dataset.invoiceDelete);
   const cancel=e.target.closest('[data-invoice-cancel]');if(cancel)return cancelInvoice(cancel.dataset.invoiceCancel);
