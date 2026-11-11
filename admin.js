@@ -1418,6 +1418,8 @@ async function createInvoiceFiles(inv){
   if(itemError)throw itemError;
   const pdfBlob=buildInvoicePdf(inv,items||[]);
   const xml=buildXRechnungXml(inv,items||[]);
+  const xmlDoc=new DOMParser().parseFromString(xml,'application/xml');
+  if(xmlDoc.querySelector('parsererror'))throw new Error('Die erzeugte XRechnung-XML-Datei ist nicht wohlgeformt.');
   const xmlBlob=new Blob([xml],{type:'application/xml;charset=utf-8'});
   const base=(inv.invoice_number||inv.id).replace(/[^A-Za-z0-9_-]/g,'_');
   const docs=[{kind:'pdf',file:new File([pdfBlob],base+'.pdf',{type:'application/pdf'}),mime:'application/pdf'},{kind:'xrechnung_xml',file:new File([xmlBlob],base+'.xml',{type:'application/xml'}),mime:'application/xml'}];
@@ -1436,9 +1438,10 @@ async function issueInvoice(id){
   if(!confirm('Rechnung verbindlich ausstellen? Die Rechnungsnummer wird endgültig vergeben.'))return;
   try{
     const {data,error}=await db.rpc('issue_invoice',{p_invoice_id:id});if(error)throw error;
-    await createInvoiceFiles(data);
+    const issued=Array.isArray(data)?data[0]:data;
+    await createInvoiceFiles(issued);
     await loadIssuedInvoices();
-    alert('Rechnung '+data.invoice_number+' wurde ausgestellt. PDF und XRechnung wurden archiviert.');
+    alert('Rechnung '+issued.invoice_number+' wurde ausgestellt. PDF und XRechnung wurden archiviert.');
   }catch(error){alert('Rechnung wurde nicht vollständig erstellt: '+error.message+'\\nFalls bereits eine Rechnungsnummer vergeben wurde, bitte die Rechnung neu laden und die Dokumente erneut erzeugen.');await loadIssuedInvoices();}
 }
 function editInvoiceDraft(id){
@@ -1466,9 +1469,10 @@ async function cancelInvoice(id){
   if(!confirm('Eine Stornorechnung wird erstellt. Die ursprüngliche Rechnung bleibt archiviert. Fortfahren?'))return;
   try{
     const {data,error}=await db.rpc('cancel_issued_invoice',{p_invoice_id:id,p_reason:reason.trim()});if(error)throw error;
-    await createInvoiceFiles(data);
+    const cancelled=Array.isArray(data)?data[0]:data;
+    await createInvoiceFiles(cancelled);
     await loadIssuedInvoices();
-    alert('Stornorechnung '+data.invoice_number+' wurde erstellt und archiviert.');
+    alert('Stornorechnung '+cancelled.invoice_number+' wurde erstellt und archiviert.');
   }catch(error){alert('Stornierung nicht möglich: '+error.message);await loadIssuedInvoices();}
 }
 async function addInvoicePayment(id){
