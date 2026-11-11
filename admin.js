@@ -55,6 +55,7 @@ const ordersView = document.getElementById('ordersView');
 const orderList = document.getElementById('orderList');
 const orderSearch = document.getElementById('orderSearch');
 const orderCountEl = document.getElementById('orderCount');
+const orderVolumeEl = document.getElementById('orderVolume');
 const orderOpenCountEl = document.getElementById('orderOpenCount');
 const orderInProgressCountEl = document.getElementById('orderInProgressCount');
 const orderCompletedCountEl = document.getElementById('orderCompletedCount');
@@ -1735,6 +1736,7 @@ function renderOrders(){
   const q=(orderSearch?.value||'').trim().toLowerCase();
   const rows=currentOrders.filter(o=>[o.order_number,o.customer_name,o.service_type,o.description].join(' ').toLowerCase().includes(q));
   if(orderCountEl)orderCountEl.textContent=String(currentOrders.length);
+  if(orderVolumeEl)orderVolumeEl.textContent=euro(currentOrders.reduce((sum,o)=>sum+Number(o.agreed_amount||0),0));
   if(orderOpenCountEl)orderOpenCountEl.textContent=String(currentOrders.filter(o=>['Offen','Geplant'].includes(o.status)).length);
   if(orderInProgressCountEl)orderInProgressCountEl.textContent=String(currentOrders.filter(o=>o.status==='In Arbeit').length);
   if(orderCompletedCountEl)orderCompletedCountEl.textContent=String(currentOrders.filter(o=>o.status==='Abgeschlossen').length);
@@ -1743,9 +1745,24 @@ function renderOrders(){
     const date=o.scheduled_date?formatDate(o.scheduled_date):'Nach Absprache';
     const time=o.scheduled_time||'';
     const statuses=['Offen','Geplant','In Arbeit','Abgeschlossen','Storniert'];
-    return '<div class="invoice-row"><span><b>'+escapeHtml(o.order_number)+'</b></span><span>'+escapeHtml(o.customer_name)+'</span><span>'+escapeHtml(o.service_type)+'</span><span>'+escapeHtml(date)+(time?' · '+escapeHtml(time):'')+'</span><span><b>'+euro(o.agreed_amount||0)+'</b></span><span><select class="offer-status-select" data-order-status="'+escapeHtml(o.id)+'">'+statuses.map(s=>'<option value="'+s+'" '+(o.status===s?'selected':'')+'>'+s+'</option>').join('')+'</select></span></div>';
+    return '<div class="invoice-row"><span><b>'+escapeHtml(o.order_number)+'</b></span><span>'+escapeHtml(o.customer_name)+'</span><span>'+escapeHtml(o.service_type)+'</span><span>'+escapeHtml(date)+(time?' · '+escapeHtml(time):'')+'</span><span><input type="number" min="0" step="0.01" value="'+Number(o.agreed_amount||0).toFixed(2)+'" data-order-amount="'+escapeHtml(o.id)+'" aria-label="Auftragswert" style="width:110px;max-width:100%;padding:7px;border:1px solid #ddd;border-radius:8px"></span><span><select class="offer-status-select" data-order-status="'+escapeHtml(o.id)+'">'+statuses.map(s=>'<option value="'+s+'" '+(o.status===s?'selected':'')+'>'+s+'</option>').join('')+'</select></span></div>';
   }).join('')+'</div>';
 }
+
+async function saveOrderAmount(input){
+  const order=currentOrders.find(o=>o.id===input.dataset.orderAmount);
+  if(!order)return;
+  const amount=Number(input.value);
+  if(!Number.isFinite(amount)||amount<0){input.value=Number(order.agreed_amount||0).toFixed(2);alert('Bitte einen gültigen Betrag ab 0,00 € eingeben.');return;}
+  const previous=Number(order.agreed_amount||0);
+  if(amount===previous)return;
+  input.disabled=true;
+  const {error}=await db.from('orders').update({agreed_amount:amount,updated_at:new Date().toISOString()}).eq('id',order.id);
+  if(error){input.value=previous.toFixed(2);alert('Auftragswert konnte nicht gespeichert werden: '+error.message);}
+  else{order.agreed_amount=amount;renderOrders();}
+  input.disabled=false;
+}
+
 async function saveOrderStatus(select){
   const order=currentOrders.find(o=>o.id===select.dataset.orderStatus);
   if(!order)return;
@@ -1853,7 +1870,7 @@ document.querySelectorAll('[data-back-dashboard]').forEach(btn=>btn.addEventList
 
 
 orderSearch?.addEventListener('input',renderOrders);
-ordersView?.addEventListener('change',e=>{const select=e.target.closest('[data-order-status]');if(select)saveOrderStatus(select)});
+ordersView?.addEventListener('change',e=>{const select=e.target.closest('[data-order-status]');if(select)saveOrderStatus(select);const amount=e.target.closest('[data-order-amount]');if(amount)saveOrderAmount(amount)});
 
 offerSearch?.addEventListener('input',renderOffers);
 offerStatusFilter?.addEventListener('change',renderOffers);
