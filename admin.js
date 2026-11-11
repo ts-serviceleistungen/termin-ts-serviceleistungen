@@ -1715,7 +1715,7 @@ async function openInvoicePreview(inv){
     }
     const previewInvoice={
       ...inv,
-      invoice_number:inv.invoice_number||'VORSCHAU – noch keine Rechnungsnummer',
+      invoice_number:inv.invoice_number||'ENTWURF',
       invoice_date:inv.invoice_date||new Date().toLocaleDateString('sv-SE'),
       due_date:inv.due_date||new Date(Date.now()+Number(currentInvoiceSettings.payment_terms_days||7)*86400000).toLocaleDateString('sv-SE'),
       seller_snapshot:{
