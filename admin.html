@@ -179,6 +179,7 @@
         <summary>Rechnungseinstellungen / Firmendaten</summary>
         <form id="invoiceSettingsForm" class="field-grid">
           <label>Firmenname / vollständiger Name<input id="invSellerName" required></label>
+          <label>Ansprechpartner (für XRechnung)<input id="invSellerContactName"></label>
           <label>Straße und Hausnummer<input id="invSellerStreet" required></label>
           <label>PLZ<input id="invSellerZip" required></label>
           <label>Ort<input id="invSellerCity" required></label>
@@ -193,7 +194,7 @@
           <label>Zahlungsziel (Tage)<input id="invPaymentDays" type="number" min="0" max="365" value="14"></label>
           <label>Rechnungspräfix<input id="invPrefix" value="RE"></label>
           <label>Stornopräfix<input id="invCancelPrefix" value="ST"></label>
-          <div class="invoice-tax-note">Steuerkonfiguration: Kleinunternehmer gemäß § 19 UStG. Es wird keine Umsatzsteuer ausgewiesen. Bitte prüfe die hinterlegten Firmendaten vor der ersten Ausstellung. Die erzeugte XRechnung-Datei sollte vor produktivem Versand zusätzlich mit dem offiziellen KoSIT-Validator geprüft werden.</div>
+          <div class="invoice-tax-note">Steuerkonfiguration: Kleinunternehmer gemäß § 19 UStG. Es wird keine Umsatzsteuer ausgewiesen. Bitte prüfe die hinterlegten Firmendaten vor der ersten Ausstellung. Für XRechnung sind zusätzlich Ansprechpartner, Verkäufer- und Kunden-E-Mail sowie Käuferreferenz erforderlich. Die XML-Datei vor Versand mit dem offiziellen KoSIT-Validator prüfen.</div>
           <div class="form-actions"><button type="submit" class="gold-btn">Einstellungen speichern</button><span id="invoiceSettingsMsg" class="form-message"></span></div>
         </form>
       </details>
@@ -211,6 +212,8 @@
           <label>USt-IdNr. Kunde (optional)<input id="invoiceCustomerVatId"></label>
           <label>Leitweg-ID / Käuferreferenz (optional)<input id="invoiceBuyerReference"></label>
           <label>Leistungsdatum<input id="invoiceServiceDate" type="date" required></label>
+          <label>Ausgabeformat<select id="invoiceOutputFormat"><option value="pdf_xrechnung">PDF + XRechnung (XML)</option><option value="pdf">Nur PDF</option></select></label>
+          <label>Lieferantennummer beim Kunden (optional)<input id="invoiceSellerIdentifier"></label>
         </div>
         <div class="invoice-items-head"><b>Rechnungspositionen</b><button type="button" id="invoiceAddItemBtn" class="secondary-btn">＋ Position hinzufügen</button></div>
         <div id="invoiceDraftItems" class="invoice-draft-items"></div>
