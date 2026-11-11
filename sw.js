@@ -1,4 +1,4 @@
-const CACHE = 'ts-serviceleistungen-pwa-v20261111-invoice-delete-3';
+const CACHE = 'ts-serviceleistungen-pwa-v20261111-original-invoice-layout-4';
 const SHELL = [
   './',
   './index.html',
@@ -7,6 +7,7 @@ const SHELL = [
   './admin.css',
   './app.js',
   './admin.js',
+  './logo-original-rechnung.webp.b64',
   './config.js',
   './pwa.js',
   './datenschutz.html',
