@@ -286,7 +286,7 @@ function estimatedEnd(r){
 async function syncCalendarForRequest(previous,updated){
   const customer=`${updated.first_name||''} ${updated.last_name||''}`.trim() || 'Kunde';
   const marker=`Kundentermin – ${customer} – ${updated.service_type||'Leistung'}`;
-  const {error:delError}=await db.from('personal_calendar_events').delete().eq('title',marker);
+  const {error:delError}=await db.from('personal_calendar_events').delete().eq('source','customer_request').eq('notes','Anfrage-ID: '+updated.id);
   if(delError)throw new Error('Kalendereintrag konnte nicht bereinigt werden: '+delError.message);
   if(updated.status!=='Bestätigt'||!updated.requested_date||!updated.requested_time)return;
   const {data:latest,error:loadError}=await db.from('requests').select('duration_hours,duration_label').eq('id',updated.id).single();
