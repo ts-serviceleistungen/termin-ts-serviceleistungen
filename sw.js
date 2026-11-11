@@ -1,4 +1,4 @@
-const CACHE = 'ts-serviceleistungen-pwa-v20261111-kundenhistorie-1';
+const CACHE = 'ts-serviceleistungen-pwa-v20261111-notify-status-1';
 const SHELL = [
   './',
   './index.html',
