@@ -1238,6 +1238,7 @@ async function loadInvoiceSettings(){
   currentInvoiceSettings=data;
   if(!data)return;
   invoiceSetField('invSellerName',data.seller_name);
+  invoiceSetField('invSellerContactName',data.seller_contact_name);
   invoiceSetField('invSellerStreet',data.seller_street);
   invoiceSetField('invSellerZip',data.seller_postal_code);
   invoiceSetField('invSellerCity',data.seller_city);
@@ -1255,7 +1256,7 @@ async function loadInvoiceSettings(){
 }
 async function saveInvoiceSettings(event){
   event.preventDefault();
-  const payload={id:1,seller_name:invoiceField('invSellerName'),seller_street:invoiceField('invSellerStreet'),seller_postal_code:invoiceField('invSellerZip'),seller_city:invoiceField('invSellerCity'),seller_country_code:'DE',seller_email:invoiceField('invSellerEmail'),seller_phone:invoiceField('invSellerPhone'),seller_website:invoiceField('invSellerWebsite'),seller_tax_number:invoiceField('invSellerTaxNumber'),seller_vat_id:invoiceField('invSellerVatId'),seller_bank_name:invoiceField('invSellerBank'),seller_iban:invoiceField('invSellerIban').replace(/\s/g,''),seller_bic:invoiceField('invSellerBic'),payment_terms_days:Number(invoiceField('invPaymentDays')||14),invoice_prefix:invoiceField('invPrefix')||'RE',cancellation_prefix:invoiceField('invCancelPrefix')||'ST',tax_mode:'small_business',updated_at:new Date().toISOString()};
+  const payload={id:1,seller_name:invoiceField('invSellerName'),seller_contact_name:invoiceField('invSellerContactName'),seller_street:invoiceField('invSellerStreet'),seller_postal_code:invoiceField('invSellerZip'),seller_city:invoiceField('invSellerCity'),seller_country_code:'DE',seller_email:invoiceField('invSellerEmail'),seller_phone:invoiceField('invSellerPhone'),seller_website:invoiceField('invSellerWebsite'),seller_tax_number:invoiceField('invSellerTaxNumber'),seller_vat_id:invoiceField('invSellerVatId'),seller_bank_name:invoiceField('invSellerBank'),seller_iban:invoiceField('invSellerIban').replace(/\s/g,''),seller_bic:invoiceField('invSellerBic'),payment_terms_days:Number(invoiceField('invPaymentDays')||14),invoice_prefix:invoiceField('invPrefix')||'RE',cancellation_prefix:invoiceField('invCancelPrefix')||'ST',tax_mode:'small_business',updated_at:new Date().toISOString()};
   if(!payload.seller_name||!payload.seller_street||!payload.seller_postal_code||!payload.seller_city||(!payload.seller_tax_number&&!payload.seller_vat_id)){invoiceSettingsMsg.textContent='Bitte Name, Anschrift und Steuernummer oder USt-IdNr. eintragen.';return;}
   const {error}=await db.from('invoice_settings').upsert(payload,{onConflict:'id'});
   if(error){invoiceSettingsMsg.textContent='Speichern fehlgeschlagen: '+error.message;return;}
@@ -1312,7 +1313,7 @@ async function createInvoiceDraft(event){
   if(orderId&&offerId){invoiceDraftMsg.textContent='Bitte entweder einen Auftrag oder ein Angebot auswählen, nicht beides.';return;}
   const customerName=invoiceField('invoiceCustomerName');
   const subtotal=rows.reduce((sum,x)=>sum+Math.round(x.quantity*x.unit_price*100)/100,0);
-  const payload={order_id:orderId,offer_id:offerId,customer_name:customerName,customer_company:invoiceField('invoiceCustomerCompany')||null,customer_street:invoiceField('invoiceCustomerStreet'),customer_postal_code:invoiceField('invoiceCustomerZip'),customer_city:invoiceField('invoiceCustomerCity'),customer_email:invoiceField('invoiceCustomerEmail')||null,customer_vat_id:invoiceField('invoiceCustomerVatId')||null,buyer_reference:invoiceField('invoiceBuyerReference')||null,service_date:invoiceField('invoiceServiceDate')||null,notes:invoiceField('invoiceDraftNotes')||null,subtotal,total:subtotal,tax_total:0};
+  const payload={order_id:orderId,offer_id:offerId,customer_name:customerName,customer_company:invoiceField('invoiceCustomerCompany')||null,customer_street:invoiceField('invoiceCustomerStreet'),customer_postal_code:invoiceField('invoiceCustomerZip'),customer_city:invoiceField('invoiceCustomerCity'),customer_email:invoiceField('invoiceCustomerEmail')||null,customer_vat_id:invoiceField('invoiceCustomerVatId')||null,buyer_reference:invoiceField('invoiceBuyerReference')||null,service_date:invoiceField('invoiceServiceDate')||null,output_format:invoiceField('invoiceOutputFormat')||'pdf_xrechnung',seller_identifier:invoiceField('invoiceSellerIdentifier')||null,notes:invoiceField('invoiceDraftNotes')||null,subtotal,total:subtotal,tax_total:0};
   const source=orderId?currentOrders.find(x=>x.id===orderId):offerId?currentOffers.find(x=>x.id===offerId):null;
   payload.customer_id=source?.customer_id||null;
   const draftId=invoiceDraftId?.value||'';
@@ -1382,7 +1383,12 @@ function buildXRechnungXml(inv,items){
   const s=inv.seller_snapshot||currentInvoiceSettings||{};
   const buyerName=inv.customer_company||inv.customer_name;
   const sellerTax=s.vat_id?'<cac:PartyTaxScheme><cbc:CompanyID>'+xmlEscape(s.vat_id)+'</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>':'<cac:PartyTaxScheme><cbc:CompanyID>'+xmlEscape(s.tax_number)+'</cbc:CompanyID><cac:TaxScheme><cbc:ID>FC</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>';
-  const party=(name,street,zip,city,country,email,tax='')=>'<cac:Party><cac:PartyName><cbc:Name>'+xmlEscape(name)+'</cbc:Name></cac:PartyName><cac:PostalAddress><cbc:StreetName>'+xmlEscape(street)+'</cbc:StreetName><cbc:CityName>'+xmlEscape(city)+'</cbc:CityName><cbc:PostalZone>'+xmlEscape(zip)+'</cbc:PostalZone><cac:Country><cbc:IdentificationCode>'+xmlEscape(country||'DE')+'</cbc:IdentificationCode></cac:Country></cac:PostalAddress>'+tax+'<cac:PartyLegalEntity><cbc:RegistrationName>'+xmlEscape(name)+'</cbc:RegistrationName></cac:PartyLegalEntity>'+(email?'<cac:Contact><cbc:ElectronicMail>'+xmlEscape(email)+'</cbc:ElectronicMail></cac:Contact>':'')+'</cac:Party>';
+  const party=(name,street,zip,city,country,email,tax='',options={})=>
+    '<cac:Party>'+(options.endpoint?'<cbc:EndpointID schemeID="EM">'+xmlEscape(options.endpoint)+'</cbc:EndpointID>':'')+
+    (options.identifier?'<cac:PartyIdentification><cbc:ID>'+xmlEscape(options.identifier)+'</cbc:ID></cac:PartyIdentification>':'')+
+    '<cac:PartyName><cbc:Name>'+xmlEscape(name)+'</cbc:Name></cac:PartyName><cac:PostalAddress><cbc:StreetName>'+xmlEscape(street)+'</cbc:StreetName><cbc:CityName>'+xmlEscape(city)+'</cbc:CityName><cbc:PostalZone>'+xmlEscape(zip)+'</cbc:PostalZone><cac:Country><cbc:IdentificationCode>'+xmlEscape(country||'DE')+'</cbc:IdentificationCode></cac:Country></cac:PostalAddress>'+tax+
+    '<cac:PartyLegalEntity><cbc:RegistrationName>'+xmlEscape(name)+'</cbc:RegistrationName>'+(options.legalForm?'<cbc:CompanyLegalForm>'+xmlEscape(options.legalForm)+'</cbc:CompanyLegalForm>':'')+'</cac:PartyLegalEntity>'+
+    (options.contactName||options.phone||email?'<cac:Contact>'+(options.contactName?'<cbc:Name>'+xmlEscape(options.contactName)+'</cbc:Name>':'')+(options.phone?'<cbc:Telephone>'+xmlEscape(options.phone)+'</cbc:Telephone>':'')+(email?'<cbc:ElectronicMail>'+xmlEscape(email)+'</cbc:ElectronicMail>':'')+'</cac:Contact>':'')+'</cac:Party>';
   const total=Math.abs(Number(inv.total||0)).toFixed(2), sub=Math.abs(Number(inv.subtotal||0)).toFixed(2);
   const isCredit=inv.document_type==='cancellation';
   const lineXml=items.map((it,i)=>{
@@ -1395,7 +1401,7 @@ function buildXRechnungXml(inv,items){
   const type=isCredit?'<cbc:CreditNoteTypeCode>381</cbc:CreditNoteTypeCode>':'<cbc:InvoiceTypeCode>380</cbc:InvoiceTypeCode>';
   const lines=isCredit?'<cac:CreditNoteLine>':'<cac:InvoiceLine>';
   const ref=isCredit&&inv.original_invoice_id?'<cac:BillingReference><cac:InvoiceDocumentReference><cbc:ID>'+xmlEscape(currentIssuedInvoices.find(x=>x.id===inv.original_invoice_id)?.invoice_number||'')+'</cbc:ID></cac:InvoiceDocumentReference></cac:BillingReference>':'';
-  return '<?xml version="1.0" encoding="UTF-8"?>\n<'+root+' xmlns="urn:oasis:names:specification:ubl:schema:xsd:'+root+'-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"><cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0</cbc:CustomizationID><cbc:ProfileID>urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</cbc:ProfileID><cbc:ID>'+xmlEscape(inv.invoice_number)+'</cbc:ID><cbc:IssueDate>'+xmlEscape(inv.invoice_date)+'</cbc:IssueDate>'+type+(inv.due_date?'<cbc:DueDate>'+xmlEscape(inv.due_date)+'</cbc:DueDate>':'')+'<cbc:DocumentCurrencyCode>EUR</cbc:DocumentCurrencyCode>'+(inv.buyer_reference?'<cbc:BuyerReference>'+xmlEscape(inv.buyer_reference)+'</cbc:BuyerReference>':'')+ref+'<cac:AccountingSupplierParty>'+party(s.name,s.street,s.postal_code,s.city,s.country_code,s.email,sellerTax)+'</cac:AccountingSupplierParty><cac:AccountingCustomerParty>'+party(buyerName,inv.customer_street,inv.customer_postal_code,inv.customer_city,inv.customer_country_code,inv.customer_email,inv.customer_vat_id?'<cac:PartyTaxScheme><cbc:CompanyID>'+xmlEscape(inv.customer_vat_id)+'</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>':'')+'</cac:AccountingCustomerParty>'+(s.iban?'<cac:PaymentMeans><cbc:PaymentMeansCode>58</cbc:PaymentMeansCode><cac:PayeeFinancialAccount><cbc:ID>'+xmlEscape(s.iban)+'</cbc:ID>'+(s.bank_name?'<cbc:Name>'+xmlEscape(s.bank_name)+'</cbc:Name>':'')+'</cac:PayeeFinancialAccount></cac:PaymentMeans>':'')+'<cac:TaxTotal><cbc:TaxAmount currencyID="EUR">0.00</cbc:TaxAmount><cac:TaxSubtotal><cbc:TaxableAmount currencyID="EUR">'+sub+'</cbc:TaxableAmount><cbc:TaxAmount currencyID="EUR">0.00</cbc:TaxAmount><cac:TaxCategory><cbc:ID>E</cbc:ID><cbc:Percent>0</cbc:Percent><cbc:TaxExemptionReason>Steuerbefreiung für Kleinunternehmer gemäß § 19 UStG</cbc:TaxExemptionReason><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:TaxCategory></cac:TaxSubtotal></cac:TaxTotal><cac:LegalMonetaryTotal><cbc:LineExtensionAmount currencyID="EUR">'+sub+'</cbc:LineExtensionAmount><cbc:TaxExclusiveAmount currencyID="EUR">'+sub+'</cbc:TaxExclusiveAmount><cbc:TaxInclusiveAmount currencyID="EUR">'+total+'</cbc:TaxInclusiveAmount><cbc:PayableAmount currencyID="EUR">'+total+'</cbc:PayableAmount></cac:LegalMonetaryTotal>'+lineXml+'</'+root+'>';
+  return '<?xml version="1.0" encoding="UTF-8"?>\n<'+root+' xmlns="urn:oasis:names:specification:ubl:schema:xsd:'+root+'-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"><cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0</cbc:CustomizationID><cbc:ProfileID>urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</cbc:ProfileID><cbc:ID>'+xmlEscape(inv.invoice_number)+'</cbc:ID><cbc:IssueDate>'+xmlEscape(inv.invoice_date)+'</cbc:IssueDate>'+type+(inv.due_date?'<cbc:DueDate>'+xmlEscape(inv.due_date)+'</cbc:DueDate>':'')+'<cbc:DocumentCurrencyCode>EUR</cbc:DocumentCurrencyCode>'+(inv.buyer_reference?'<cbc:BuyerReference>'+xmlEscape(inv.buyer_reference)+'</cbc:BuyerReference>':'')+ref+'<cac:AccountingSupplierParty>'+party(s.name,s.street,s.postal_code,s.city,s.country_code,s.email,sellerTax,{endpoint:s.email,identifier:inv.seller_identifier,contactName:s.contact_name,phone:s.phone,legalForm:'Kein Ausweis von Umsatzsteuer, da Kleinunternehmer gemäß § 19 UStG'})+'</cac:AccountingSupplierParty><cac:AccountingCustomerParty>'+party(buyerName,inv.customer_street,inv.customer_postal_code,inv.customer_city,inv.customer_country_code,inv.customer_email,inv.customer_vat_id?'<cac:PartyTaxScheme><cbc:CompanyID>'+xmlEscape(inv.customer_vat_id)+'</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>':'',{endpoint:inv.customer_email})+'</cac:AccountingCustomerParty>'+(s.iban?'<cac:PaymentMeans><cbc:PaymentMeansCode>58</cbc:PaymentMeansCode><cac:PayeeFinancialAccount><cbc:ID>'+xmlEscape(s.iban)+'</cbc:ID>'+(s.bank_name?'<cbc:Name>'+xmlEscape(s.bank_name)+'</cbc:Name>':'')+'</cac:PayeeFinancialAccount></cac:PaymentMeans>':'')+'<cac:TaxTotal><cbc:TaxAmount currencyID="EUR">0.00</cbc:TaxAmount><cac:TaxSubtotal><cbc:TaxableAmount currencyID="EUR">'+sub+'</cbc:TaxableAmount><cbc:TaxAmount currencyID="EUR">0.00</cbc:TaxAmount><cac:TaxCategory><cbc:ID>E</cbc:ID><cbc:Percent>0</cbc:Percent><cbc:TaxExemptionReason>Steuerbefreiung für Kleinunternehmer gemäß § 19 UStG</cbc:TaxExemptionReason><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:TaxCategory></cac:TaxSubtotal></cac:TaxTotal><cac:LegalMonetaryTotal><cbc:LineExtensionAmount currencyID="EUR">'+sub+'</cbc:LineExtensionAmount><cbc:TaxExclusiveAmount currencyID="EUR">'+sub+'</cbc:TaxExclusiveAmount><cbc:TaxInclusiveAmount currencyID="EUR">'+total+'</cbc:TaxInclusiveAmount><cbc:PayableAmount currencyID="EUR">'+total+'</cbc:PayableAmount></cac:LegalMonetaryTotal>'+lineXml+'</'+root+'>';
 }
 function buildInvoicePdf(inv,items){
   if(!window.jspdf?.jsPDF)throw new Error('PDF-Bibliothek konnte nicht geladen werden. Bitte Seite neu laden.');
@@ -1417,12 +1423,15 @@ async function createInvoiceFiles(inv){
   const {data:items,error:itemError}=await db.from('invoice_items').select('*').eq('invoice_id',inv.id).order('position');
   if(itemError)throw itemError;
   const pdfBlob=buildInvoicePdf(inv,items||[]);
-  const xml=buildXRechnungXml(inv,items||[]);
-  const xmlDoc=new DOMParser().parseFromString(xml,'application/xml');
-  if(xmlDoc.querySelector('parsererror'))throw new Error('Die erzeugte XRechnung-XML-Datei ist nicht wohlgeformt.');
-  const xmlBlob=new Blob([xml],{type:'application/xml;charset=utf-8'});
   const base=(inv.invoice_number||inv.id).replace(/[^A-Za-z0-9_-]/g,'_');
-  const docs=[{kind:'pdf',file:new File([pdfBlob],base+'.pdf',{type:'application/pdf'}),mime:'application/pdf'},{kind:'xrechnung_xml',file:new File([xmlBlob],base+'.xml',{type:'application/xml'}),mime:'application/xml'}];
+  const docs=[{kind:'pdf',file:new File([pdfBlob],base+'.pdf',{type:'application/pdf'}),mime:'application/pdf'}];
+  if(inv.output_format==='pdf_xrechnung'){
+    const xml=buildXRechnungXml(inv,items||[]);
+    const xmlDoc=new DOMParser().parseFromString(xml,'application/xml');
+    if(xmlDoc.querySelector('parsererror'))throw new Error('Die erzeugte XRechnung-XML-Datei ist nicht wohlgeformt.');
+    const xmlBlob=new Blob([xml],{type:'application/xml;charset=utf-8'});
+    docs.push({kind:'xrechnung_xml',file:new File([xmlBlob],base+'.xml',{type:'application/xml'}),mime:'application/xml'});
+  }
   for(const d of docs){
     const path=new Date().getFullYear()+'/'+base+'/'+d.file.name;
     const {error:uploadError}=await db.storage.from('issued-invoices').upload(path,d.file,{upsert:true,contentType:d.mime});
@@ -1441,7 +1450,7 @@ async function issueInvoice(id){
     const issued=Array.isArray(data)?data[0]:data;
     await createInvoiceFiles(issued);
     await loadIssuedInvoices();
-    alert('Rechnung '+issued.invoice_number+' wurde ausgestellt. PDF und XRechnung wurden archiviert.');
+    alert('Rechnung '+issued.invoice_number+' wurde ausgestellt. '+(issued.output_format==='pdf_xrechnung'?'PDF und XRechnung wurden archiviert.':'PDF wurde archiviert.'));
   }catch(error){alert('Rechnung wurde nicht vollständig erstellt: '+error.message+'\\nFalls bereits eine Rechnungsnummer vergeben wurde, bitte die Rechnung neu laden und die Dokumente erneut erzeugen.');await loadIssuedInvoices();}
 }
 function editInvoiceDraft(id){
@@ -1452,7 +1461,7 @@ function editInvoiceDraft(id){
   invoiceSetField('invoiceCustomerStreet',inv.customer_street);invoiceSetField('invoiceCustomerZip',inv.customer_postal_code);
   invoiceSetField('invoiceCustomerCity',inv.customer_city);invoiceSetField('invoiceCustomerEmail',inv.customer_email);
   invoiceSetField('invoiceCustomerVatId',inv.customer_vat_id);invoiceSetField('invoiceBuyerReference',inv.buyer_reference);
-  invoiceSetField('invoiceServiceDate',inv.service_date);invoiceSetField('invoiceDraftNotes',inv.notes);
+  invoiceSetField('invoiceServiceDate',inv.service_date);invoiceSetField('invoiceOutputFormat',inv.output_format||'pdf_xrechnung');invoiceSetField('invoiceSellerIdentifier',inv.seller_identifier);invoiceSetField('invoiceDraftNotes',inv.notes);
   invoiceDraftItems.innerHTML='';(inv.invoice_items||[]).forEach(item=>addInvoiceItemRow(item.description,item.quantity,item.unit_price));
   if(!(inv.invoice_items||[]).length)addInvoiceItemRow();
   invoiceDraftForm.scrollIntoView({behavior:'smooth',block:'start'});
