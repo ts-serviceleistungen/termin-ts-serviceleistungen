@@ -1,4 +1,4 @@
-const CACHE = 'ts-serviceleistungen-pwa-v20261111-fahrzeugzeit';
+const CACHE = 'ts-serviceleistungen-pwa-v20261111-fahrzeugzeit-2';
 const SHELL = [
   './',
   './index.html',
