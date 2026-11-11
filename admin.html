@@ -106,6 +106,7 @@
     <div class="menu-grid">
   <button data-nav="dashboard" class="menu-card active"><b class="menu-icon">▥</b><span>Dashboard<small>Übersicht und Auswertungen</small></span><i>›</i></button>
   <button data-nav="requests" class="menu-card"><b class="menu-icon">▣</b><span>Terminanfragen<small>Kundenanfragen verwalten</small></span><i>›</i></button>
+  <button data-nav="orders" class="menu-card"><b class="menu-icon">▦</b><span>Aufträge<small>Auftragsstatus und Kundenaufträge</small></span><i>›</i></button>
   <button data-nav="invoices" class="menu-card"><b class="menu-icon">▤</b><span>Rechnungen<small>Rechnungen und Zahlungseingänge</small></span><i>›</i></button>
   <button data-nav="receipts" class="menu-card"><b class="menu-icon">▥</b><span>Belege<small>Belege und Ausgaben</small></span><i>›</i></button>
   <button data-nav="offers" class="menu-card gold-selected"><b class="menu-icon">▤</b><span>Angebote<small>Angebote und mögliche Einnahmen</small></span><i>›</i></button>
@@ -121,6 +122,21 @@
   </section>
 
   <section id="requestsView" class="hidden"><div class="section-toolbar"><button type="button" class="back-dashboard" data-back-dashboard>← Dashboard</button></div><div class="stats-grid compact"><div class="stat"><small>Neue</small><b id="newc">0</b></div><div class="stat"><small>Offen</small><b id="open">0</b></div><div class="stat"><small>Heute</small><b id="today">0</b></div></div><section class="panel"><div class="panel-head"><b>Anfragen</b></div><div id="list"></div></section></section>
+
+  <section id="ordersView" class="hidden">
+    <div class="section-toolbar"><button type="button" class="back-dashboard" data-back-dashboard>← Dashboard</button></div>
+    <section class="panel">
+      <div class="section-title"><div><span class="eyebrow">BETRIEBSVERWALTUNG</span><h2>Auftragsverwaltung</h2><p>Übernommene Kundenanfragen und laufende Arbeiten</p></div></div>
+      <div class="finance-cards">
+        <div><small>Aufträge gesamt</small><b id="orderCount">0</b></div>
+        <div><small>Offen / geplant</small><b id="orderOpenCount">0</b></div>
+        <div><small>In Arbeit</small><b id="orderInProgressCount">0</b></div>
+        <div><small>Abgeschlossen</small><b id="orderCompletedCount">0</b></div>
+      </div>
+      <label style="display:block;margin:16px 0 8px">Suche<input id="orderSearch" class="search" placeholder="Auftragsnummer, Kunde oder Leistung suchen…"></label>
+      <div id="orderList"><p>Aufträge werden geladen…</p></div>
+    </section>
+  </section>
 
   <section id="invoicesView" class="hidden"><div class="section-toolbar"><button type="button" class="back-dashboard" data-back-dashboard>← Dashboard</button></div><section class="panel"><div class="section-title"><div><span class="eyebrow">FINANZEN</span><h2>Rechnungen</h2><p>Rechnungen und Zahlungseingänge</p></div></div><div class="finance-cards"><div><small>Gesamt 2026</small><b id="invoiceTotal">0,00 €</b></div><div><small>Aktueller Monat</small><b id="invoiceMonthTotal">0,00 €</b></div></div><input id="invoiceSearch" class="search" placeholder="Kunde, Rechnungsnummer oder Beschreibung suchen…"><div id="invoiceList"></div></section></section>
 
