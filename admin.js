@@ -1225,6 +1225,7 @@ function addInvoiceItemRow(description='',quantity='1',price='0.00'){
 }
 function resetInvoiceDraft(){
   invoiceDraftForm?.reset();
+  if(invoiceDraftId)invoiceDraftId.value='';
   invoiceSourceOrder.value='';
   invoiceSourceOffer.value='';
   invoiceDraftItems.innerHTML='';
@@ -1295,7 +1296,7 @@ function renderIssuedInvoices(){
     const hasPdf=(inv.invoice_documents||[]).some(d=>d.document_kind==='pdf');
     const hasXml=(inv.invoice_documents||[]).some(d=>d.document_kind==='xrechnung_xml');
     const actions=inv.status==='draft'
-      ? '<button type="button" class="gold-btn" data-invoice-issue="'+inv.id+'">Rechnung verbindlich ausstellen</button><button type="button" class="danger-btn" data-invoice-delete="'+inv.id+'">Entwurf löschen</button>'
+      ? '<button type="button" class="secondary-btn" data-invoice-edit="'+inv.id+'">Entwurf bearbeiten</button><button type="button" class="gold-btn" data-invoice-issue="'+inv.id+'">Rechnung verbindlich ausstellen</button><button type="button" class="danger-btn" data-invoice-delete="'+inv.id+'">Entwurf löschen</button>'
       : (hasPdf?'<button type="button" class="secondary-btn" data-invoice-download="'+inv.id+'" data-kind="pdf">PDF herunterladen</button>':'')+
         (hasXml?'<button type="button" class="secondary-btn" data-invoice-download="'+inv.id+'" data-kind="xrechnung_xml">XRechnung XML</button>':'')+
         '<button type="button" class="secondary-btn" data-invoice-generate-docs="'+inv.id+'">Dokumente (neu) erzeugen</button>'+
@@ -1311,14 +1312,23 @@ async function createInvoiceDraft(event){
   if(orderId&&offerId){invoiceDraftMsg.textContent='Bitte entweder einen Auftrag oder ein Angebot auswählen, nicht beides.';return;}
   const customerName=invoiceField('invoiceCustomerName');
   const subtotal=rows.reduce((sum,x)=>sum+Math.round(x.quantity*x.unit_price*100)/100,0);
-  const payload={order_id:orderId,offer_id:offerId,customer_name:customerName,customer_company:invoiceField('invoiceCustomerCompany')||null,customer_street:invoiceField('invoiceCustomerStreet'),customer_postal_code:invoiceField('invoiceCustomerZip'),customer_city:invoiceField('invoiceCustomerCity'),customer_email:invoiceField('invoiceCustomerEmail')||null,service_date:invoiceField('invoiceServiceDate')||null,notes:invoiceField('invoiceDraftNotes')||null,subtotal,total:subtotal,tax_total:0};
+  const payload={order_id:orderId,offer_id:offerId,customer_name:customerName,customer_company:invoiceField('invoiceCustomerCompany')||null,customer_street:invoiceField('invoiceCustomerStreet'),customer_postal_code:invoiceField('invoiceCustomerZip'),customer_city:invoiceField('invoiceCustomerCity'),customer_email:invoiceField('invoiceCustomerEmail')||null,customer_vat_id:invoiceField('invoiceCustomerVatId')||null,buyer_reference:invoiceField('invoiceBuyerReference')||null,service_date:invoiceField('invoiceServiceDate')||null,notes:invoiceField('invoiceDraftNotes')||null,subtotal,total:subtotal,tax_total:0};
   const source=orderId?currentOrders.find(x=>x.id===orderId):offerId?currentOffers.find(x=>x.id===offerId):null;
   payload.customer_id=source?.customer_id||null;
-  const {data:invoice,error}=await db.from('issued_invoices').insert(payload).select('*').single();
+  const draftId=invoiceDraftId?.value||'';
+  let invoice,error;
+  if(draftId){
+    const result=await db.from('issued_invoices').update(payload).eq('id',draftId).eq('status','draft').select('*').single();
+    invoice=result.data;error=result.error;
+  }else{
+    const result=await db.from('issued_invoices').insert(payload).select('*').single();
+    invoice=result.data;error=result.error;
+  }
   if(error){invoiceDraftMsg.textContent='Entwurf konnte nicht gespeichert werden: '+error.message;return;}
+  if(draftId){const {error:removeError}=await db.from('invoice_items').delete().eq('invoice_id',draftId);if(removeError){invoiceDraftMsg.textContent='Alte Positionen konnten nicht ersetzt werden: '+removeError.message;return;}}
   const items=rows.map((x,i)=>({...x,invoice_id:invoice.id,position:i+1,unit_code:'C62'}));
   const {error:itemError}=await db.from('invoice_items').insert(items);
-  if(itemError){await db.from('issued_invoices').delete().eq('id',invoice.id);invoiceDraftMsg.textContent='Positionen konnten nicht gespeichert werden: '+itemError.message;return;}
+  if(itemError){invoiceDraftMsg.textContent='Positionen konnten nicht gespeichert werden: '+itemError.message;return;}
   invoiceDraftForm.classList.add('hidden');
   resetInvoiceDraft();
   await loadIssuedInvoices();
@@ -1430,6 +1440,19 @@ async function issueInvoice(id){
     await loadIssuedInvoices();
     alert('Rechnung '+data.invoice_number+' wurde ausgestellt. PDF und XRechnung wurden archiviert.');
   }catch(error){alert('Rechnung wurde nicht vollständig erstellt: '+error.message+'\\nFalls bereits eine Rechnungsnummer vergeben wurde, bitte die Rechnung neu laden und die Dokumente erneut erzeugen.');await loadIssuedInvoices();}
+}
+function editInvoiceDraft(id){
+  const inv=currentIssuedInvoices.find(x=>x.id===id&&x.status==='draft');if(!inv)return;
+  resetInvoiceDraft();invoiceDraftId.value=inv.id;invoiceDraftForm.classList.remove('hidden');
+  invoiceSourceOrder.value=inv.order_id||'';invoiceSourceOffer.value=inv.offer_id||'';
+  invoiceSetField('invoiceCustomerName',inv.customer_name);invoiceSetField('invoiceCustomerCompany',inv.customer_company);
+  invoiceSetField('invoiceCustomerStreet',inv.customer_street);invoiceSetField('invoiceCustomerZip',inv.customer_postal_code);
+  invoiceSetField('invoiceCustomerCity',inv.customer_city);invoiceSetField('invoiceCustomerEmail',inv.customer_email);
+  invoiceSetField('invoiceCustomerVatId',inv.customer_vat_id);invoiceSetField('invoiceBuyerReference',inv.buyer_reference);
+  invoiceSetField('invoiceServiceDate',inv.service_date);invoiceSetField('invoiceDraftNotes',inv.notes);
+  invoiceDraftItems.innerHTML='';(inv.invoice_items||[]).forEach(item=>addInvoiceItemRow(item.description,item.quantity,item.unit_price));
+  if(!(inv.invoice_items||[]).length)addInvoiceItemRow();
+  invoiceDraftForm.scrollIntoView({behavior:'smooth',block:'start'});
 }
 async function deleteInvoiceDraft(id){
   const inv=currentIssuedInvoices.find(x=>x.id===id);if(!inv||inv.status!=='draft')return;
@@ -2362,6 +2385,7 @@ invoiceSourceOrder?.addEventListener('change',onInvoiceSourceOrder);
 invoiceSourceOffer?.addEventListener('change',onInvoiceSourceOffer);
 issuedInvoiceSearch?.addEventListener('input',renderIssuedInvoices);
 issuedInvoiceList?.addEventListener('click',async e=>{
+  const edit=e.target.closest('[data-invoice-edit]');if(edit)return editInvoiceDraft(edit.dataset.invoiceEdit);
   const issue=e.target.closest('[data-invoice-issue]');if(issue)return issueInvoice(issue.dataset.invoiceIssue);
   const del=e.target.closest('[data-invoice-delete]');if(del)return deleteInvoiceDraft(del.dataset.invoiceDelete);
   const cancel=e.target.closest('[data-invoice-cancel]');if(cancel)return cancelInvoice(cancel.dataset.invoiceCancel);
