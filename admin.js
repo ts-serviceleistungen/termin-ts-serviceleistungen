@@ -54,6 +54,8 @@ const requestsView = document.getElementById('requestsView');
 const ordersView = document.getElementById('ordersView');
 const orderList = document.getElementById('orderList');
 const orderSearch = document.getElementById('orderSearch');
+const manualOrderForm = document.getElementById('manualOrderForm');
+const manualOrderMsg = document.getElementById('manualOrderMsg');
 const orderCountEl = document.getElementById('orderCount');
 const orderVolumeEl = document.getElementById('orderVolume');
 const orderOpenCountEl = document.getElementById('orderOpenCount');
@@ -1758,6 +1760,7 @@ function renderOrders(){
         <label>Auftragswert (€)<input type="number" min="0" step="0.01" value="${Number(o.agreed_amount||0).toFixed(2)}" data-order-field="agreed_amount"></label>
         <label>Ausführung am<input type="date" value="${escapeHtml(o.scheduled_date||'')}" data-order-field="scheduled_date"></label>
         <label>Uhrzeit<input type="time" value="${escapeHtml(o.scheduled_time||'')}" data-order-field="scheduled_time"></label>
+        <label>Geschätzte Dauer (Std.)<input type="number" min="0" step="0.25" value="${o.estimated_hours==null?'':Number(o.estimated_hours)}" data-order-field="estimated_hours"></label>
         <label class="order-wide">Zugehöriges Angebot<select data-order-offer="${escapeHtml(o.id)}"><option value="">Kein Angebot verknüpft</option>${offerOptions}</select><small>Hier werden vorhandene Angebote aus dem Angebotsbereich zugeordnet. Neue PDF-Angebote erstellst du weiterhin über deinen bisherigen Ablauf.</small></label>
         <label>Externe Rechnungsnummer<input type="text" value="${escapeHtml(o.external_invoice_number||'')}" data-order-field="external_invoice_number" placeholder="Wird im Rechnungsprogramm erstellt"></label>
         <label class="order-wide">Leistungsbeschreibung<textarea rows="2" data-order-field="description">${escapeHtml(o.description||'')}</textarea></label>
@@ -1768,6 +1771,60 @@ function renderOrders(){
   }).join('');
 }
 
+async function createManualOrder(event){
+  event.preventDefault();
+  if(!manualOrderForm)return;
+  const submit=manualOrderForm.querySelector('button[type="submit"]');
+  const formData=new FormData(manualOrderForm);
+  const customerName=String(formData.get('customer_name')||'').trim();
+  const serviceType=String(formData.get('service_type')||'').trim();
+  const amount=Number(formData.get('agreed_amount')||0);
+  const hoursValue=String(formData.get('estimated_hours')||'').trim();
+  const hours=hoursValue===''?null:Number(hoursValue);
+  if(!customerName||!serviceType){alert('Bitte Kundenname und Leistung ausfüllen.');return;}
+  if(!Number.isFinite(amount)||amount<0){alert('Bitte einen gültigen Auftragswert eingeben.');return;}
+  if(hours!==null&&(!Number.isFinite(hours)||hours<0)){alert('Bitte eine gültige geschätzte Dauer eingeben.');return;}
+  const email=String(formData.get('customer_email')||'').trim();
+  const phone=String(formData.get('customer_phone')||'').trim();
+  const nameParts=customerName.split(/\s+/);
+  if(manualOrderMsg)manualOrderMsg.textContent='Auftrag wird angelegt…';
+  if(submit)submit.disabled=true;
+  try{
+    let customerId=null;
+    if(email){
+      const {data:matches,error}=await db.from('customers').select('id').ilike('email',email).order('created_at',{ascending:true}).limit(1);
+      if(error)throw error;
+      if(matches?.length)customerId=matches[0].id;
+      else{
+        const {data:newCustomer,error:createError}=await db.from('customers').insert({
+          vorname:nameParts[0]||null,nachname:nameParts.slice(1).join(' ')||null,
+          email,telefon:phone||null,land:'Deutschland',notizen:'Kundenstamm aus manuell angelegtem Auftrag erstellt'
+        }).select('id').single();
+        if(createError)throw createError;
+        customerId=newCustomer.id;
+      }
+    }
+    const payload={
+      request_id:null,customer_id:customerId,status:'Offen',
+      service_type:serviceType,customer_name:customerName,
+      customer_email:email||null,customer_phone:phone||null,
+      description:String(formData.get('description')||'').trim()||serviceType,
+      scheduled_date:String(formData.get('scheduled_date')||'')||null,
+      scheduled_time:String(formData.get('scheduled_time')||'')||null,
+      estimated_hours:hours,agreed_amount:amount
+    };
+    const {data:created,error}=await db.from('orders').insert(payload).select('*').single();
+    if(error)throw error;
+    manualOrderForm.reset();
+    manualOrderForm.elements.agreed_amount.value='0';
+    if(manualOrderMsg)manualOrderMsg.textContent='Auftrag '+created.order_number+' wurde angelegt.';
+    await loadOrders();
+  }catch(error){
+    if(manualOrderMsg)manualOrderMsg.textContent='Fehler: '+error.message;
+    alert('Auftrag konnte nicht angelegt werden: '+error.message);
+  }finally{if(submit)submit.disabled=false;}
+}
+
 async function saveOrderDetails(button){
   const card=button.closest('[data-order-card]');
   const order=currentOrders.find(o=>o.id===button.dataset.orderSave);
@@ -1775,7 +1832,10 @@ async function saveOrderDetails(button){
   const value=name=>card.querySelector('[data-order-field="'+name+'"]')?.value??'';
   const amount=Number(value('agreed_amount'));
   if(!Number.isFinite(amount)||amount<0){alert('Bitte einen gültigen Auftragswert ab 0,00 € eingeben.');return;}
-  const payload={agreed_amount:amount,scheduled_date:value('scheduled_date')||null,scheduled_time:value('scheduled_time')||null,external_invoice_number:value('external_invoice_number').trim()||null,description:value('description').trim()||null,notes:value('notes').trim()||null,updated_at:new Date().toISOString()};
+  const hoursRaw=value('estimated_hours');
+  const hours=hoursRaw===''?null:Number(hoursRaw);
+  if(hours!==null&&(!Number.isFinite(hours)||hours<0)){alert('Bitte eine gültige Dauer ab 0 Stunden eingeben.');return;}
+  const payload={agreed_amount:amount,scheduled_date:value('scheduled_date')||null,scheduled_time:value('scheduled_time')||null,estimated_hours:hours,external_invoice_number:value('external_invoice_number').trim()||null,description:value('description').trim()||null,notes:value('notes').trim()||null,updated_at:new Date().toISOString()};
   button.disabled=true;
   try{
     const {error}=await db.from('orders').update(payload).eq('id',order.id);
@@ -1938,6 +1998,7 @@ document.querySelectorAll('[data-back-dashboard]').forEach(btn=>btn.addEventList
 
 
 orderSearch?.addEventListener('input',renderOrders);
+manualOrderForm?.addEventListener('submit',createManualOrder);
 ordersView?.addEventListener('change',e=>{
   const select=e.target.closest('[data-order-status]');if(select)saveOrderStatus(select);
   const amount=e.target.closest('[data-order-amount]');if(amount)saveOrderAmount(amount);
