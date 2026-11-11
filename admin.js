@@ -1781,7 +1781,7 @@ function renderOrders(){
         <label class="order-wide">Leistungsbeschreibung<textarea rows="2" data-order-field="description">${escapeHtml(o.description||'')}</textarea></label>
         <label class="order-wide">Interne Notizen<textarea rows="2" data-order-field="notes">${escapeHtml(o.notes||'')}</textarea></label>
       </div>
-      <div class="order-card-foot"><span>${linked?'Verknüpftes Angebot: '+escapeHtml(linked.angebotsnummer||'ohne Nummer'):'Noch kein Angebot zugeordnet'}</span><button type="button" class="gold-btn" data-order-save="${escapeHtml(o.id)}">Änderungen speichern</button></div>
+      <div class="order-card-foot"><span>${linked?'Verknüpftes Angebot: '+escapeHtml(linked.angebotsnummer||'ohne Nummer'):'Noch kein Angebot zugeordnet'}</span><div class="order-card-actions"><button type="button" class="gold-btn" data-order-save="${escapeHtml(o.id)}">Änderungen speichern</button><button type="button" class="danger-btn" data-order-delete="${escapeHtml(o.id)}">Auftrag löschen</button></div></div>
     </article>`;
   };
   const groupedStatuses=statuses.map(status=>{
@@ -1867,6 +1867,30 @@ async function saveOrderDetails(button){
     alert('Auftrag '+order.order_number+' wurde aktualisiert.');
   }catch(error){alert('Auftrag konnte nicht gespeichert werden: '+error.message);}
   finally{button.disabled=false;}
+}
+
+async function deleteOrder(button){
+  const order=currentOrders.find(o=>o.id===button.dataset.orderDelete);
+  if(!order)return;
+  const linkedOffer=currentOffers.find(x=>x.order_id===order.id);
+  const warning=linkedOffer
+    ? '\n\nDas zugeordnete Angebot bleibt erhalten und wird vom Auftrag getrennt.'
+    : '';
+  if(!confirm('Möchtest du den Auftrag '+order.order_number+' wirklich endgültig löschen?\n\nDie ursprüngliche Anfrage und Kundendaten bleiben erhalten.'+warning))return;
+  button.disabled=true;
+  try{
+    const {error}=await db.from('orders').delete().eq('id',order.id);
+    if(error)throw error;
+    currentOrders=currentOrders.filter(o=>o.id!==order.id);
+    orderRequestIds=new Set(currentOrders.map(o=>o.request_id).filter(Boolean));
+    currentOffers.forEach(offer=>{if(offer.order_id===order.id)offer.order_id=null;});
+    renderOrders();
+    renderOffers();
+    alert('Auftrag '+order.order_number+' wurde gelöscht.');
+  }catch(error){
+    alert('Auftrag konnte nicht gelöscht werden: '+error.message);
+    button.disabled=false;
+  }
 }
 
 async function saveOrderOfferLink(select){
@@ -2062,7 +2086,7 @@ ordersView?.addEventListener('change',e=>{
   const amount=e.target.closest('[data-order-amount]');if(amount)saveOrderAmount(amount);
   const offer=e.target.closest('[data-order-offer]');if(offer)saveOrderOfferLink(offer);
 });
-ordersView?.addEventListener('click',e=>{const button=e.target.closest('[data-order-save]');if(button)saveOrderDetails(button)});
+ordersView?.addEventListener('click',e=>{const del=e.target.closest('[data-order-delete]');if(del)return deleteOrder(del);const button=e.target.closest('[data-order-save]');if(button)saveOrderDetails(button)});
 
 offerSearch?.addEventListener('input',renderOffers);
 offerStatusFilter?.addEventListener('change',renderOffers);
