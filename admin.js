@@ -1674,8 +1674,8 @@ async function buildInvoicePdf(inv,items){
     ensureSpace(lines.length*4.8);doc.text(lines,left,y);y+=lines.length*4.8+4;
   }
 
-  // Wie in der Originalrechnung steht die Grußformel auf einer eigenen zweiten Seite.
-  addPage();
+  // Grußformel direkt unter den Zahlungsinformationen auf derselben Seite.
+  y+=4;
   doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(...black);
   text('Mit freundlichen Grüßen',left,y);
   y+=5;
