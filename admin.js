@@ -1480,9 +1480,11 @@ async function addInvoicePayment(id){
   const amountRaw=prompt('Zahlungseingang in Euro. Noch offen: '+euro(Math.max(0,Number(inv.total||0)-Number(inv.amount_paid||0))));if(amountRaw===null)return;
   const amount=Number(amountRaw.replace(',','.'));
   if(!Number.isFinite(amount)||amount<=0){alert('Bitte einen gültigen positiven Betrag eingeben.');return;}
+  const paymentDate=prompt('Zahlungsdatum (JJJJ-MM-TT)',new Date().toLocaleDateString('sv-SE'));if(!paymentDate)return;
+  if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(paymentDate)){alert('Bitte das Datum im Format JJJJ-MM-TT eingeben.');return;}
   const methodRaw=prompt('Zahlungsart: Überweisung, Bar, Karte oder Sonstiges','Überweisung')||'Überweisung';
   const map={'Überweisung':'bank_transfer','Bar':'cash','Karte':'card','Sonstiges':'other'};
-  const {error}=await db.from('invoice_payments').insert({invoice_id:id,amount,payment_method:map[methodRaw]||'other',payment_date:new Date().toLocaleDateString('sv-SE')});
+  const {error}=await db.from('invoice_payments').insert({invoice_id:id,amount,payment_method:map[methodRaw]||'other',payment_date:paymentDate});
   if(error){alert('Zahlung konnte nicht gespeichert werden: '+error.message);return;}
   await loadIssuedInvoices();
 }
