@@ -241,28 +241,40 @@ async function load(){
 }
 function field(label,value){return `<div class="detail-field"><small>${escapeHtml(label)}</small><div>${escapeHtml(value||'—')}</div></div>`}
 function arrayValue(value){return Array.isArray(value)&&value.length?value.join(', '):'—'}
-async function openDetails(id){selectedRequest=requests.find(x=>x.id===id);if(!selectedRequest)return;const x=selectedRequest;detailTitle.textContent=`${x.first_name||''} ${x.last_name||''}`.trim()||'Anfrage';detailBody.innerHTML=`<div class="detail-grid">${field('Status',x.status)}${field('Leistung',x.service_type)}${field('Wunschdatum',formatDate(x.requested_date))}${field('Wunschzeit',x.requested_time)}${field('Vorname',x.first_name)}${field('Nachname',x.last_name)}${field('Telefon',x.phone)}${field('E-Mail',x.email)}${field('Fahrzeugart',x.vehicle_type)}${field('Hersteller',x.make)}${field('Modell / Typ',x.model)}${field('Farbe',x.color)}${field('Baujahr',x.year)}${field('Kennzeichen',x.plate)}${field('Verschmutzungsgrad',x.dirt_level)}${field('Tierhaare',x.pet_hair)}${field('Menge',x.quantity)}${field('Reifentyp',x.tire_type)}${field('Gewünschte Leistungen',arrayValue(x.care_options))}</div><div class="detail-text">${field('Details / Nachricht',x.details||x.message)}</div><div id="photoGallery" class="photo-gallery"><p>Fotos werden geladen...</p></div>`;detailActions.innerHTML='<button class="primary" data-modal-action="confirm">Termin bestätigen</button><button data-modal-action="alternative">Alternativtermin</button><button data-modal-action="reject">Anfrage ablehnen</button><button data-modal-action="delete">Löschen</button>';modal.classList.remove('hidden');await loadRequestPhotos(x.id)}
+async function openDetails(id){selectedRequest=requests.find(x=>x.id===id);if(!selectedRequest)return;const x=selectedRequest;detailTitle.textContent=`${x.first_name||''} ${x.last_name||''}`.trim()||'Anfrage';detailBody.innerHTML=`<div class="detail-grid">${field('Status',x.status)}${field('Leistung',x.service_type)}${field('Wunschdatum',formatDate(x.requested_date))}${field('Gewünschte Abgabezeit / Arbeitsbeginn',x.requested_time)${field('Voraussichtliche Arbeitsdauer',x.duration_label|| (x.duration_hours?x.duration_hours+' Stunden':''))}${field('Voraussichtliches Ende',estimatedEnd(x))}}${field('Vorname',x.first_name)}${field('Nachname',x.last_name)}${field('Telefon',x.phone)}${field('E-Mail',x.email)}${field('Fahrzeugart',x.vehicle_type)}${field('Hersteller',x.make)}${field('Modell / Typ',x.model)}${field('Farbe',x.color)}${field('Baujahr',x.year)}${field('Kennzeichen',x.plate)}${field('Verschmutzungsgrad',x.dirt_level)}${field('Tierhaare',x.pet_hair)}${field('Menge',x.quantity)}${field('Reifentyp',x.tire_type)}${field('Gewünschte Leistungen',arrayValue(x.care_options))}</div><div class="detail-text">${field('Details / Nachricht',x.details||x.message)}</div><div id="photoGallery" class="photo-gallery"><p>Fotos werden geladen...</p></div>`;detailActions.innerHTML='<button class="primary" data-modal-action="confirm">Termin bestätigen</button><button data-modal-action="alternative">Alternativtermin</button><button data-modal-action="reject">Anfrage ablehnen</button><button data-modal-action="delete">Löschen</button>';modal.classList.remove('hidden');await loadRequestPhotos(x.id)}
 async function loadRequestPhotos(requestId){const gallery=document.getElementById('photoGallery');if(!gallery)return;const {data,error}=await db.from('request_photos').select('storage_path,created_at').eq('request_id',requestId).order('created_at',{ascending:true});if(error){gallery.innerHTML=`<p class="notice">Fotos konnten nicht geladen werden: ${escapeHtml(error.message)}</p>`;return}if(!data||!data.length){gallery.innerHTML='<p>Keine Fotos vorhanden.</p>';return}const items=[];for(const photo of data){const {data:urlData,error:urlError}=await db.storage.from('vehicle-photos').createSignedUrl(photo.storage_path,3600);if(urlError||!urlData?.signedUrl){items.push(`<div class="photo-item"><p>Foto konnte nicht geladen werden.</p></div>`)}else{items.push(`<a class="photo-item" href="${escapeHtml(urlData.signedUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(urlData.signedUrl)}" alt="Fahrzeugfoto" loading="lazy"></a>`)}}gallery.innerHTML=`<h3>Fahrzeugfotos</h3><div class="photo-grid">${items.join('')}</div>`}
 function closeDetails(){modal.classList.add('hidden');selectedRequest=null}
 async function sendCustomerEmail(r,status,extra={}){const {data:{session}}=await db.auth.getSession();if(!session)throw new Error('Admin-Sitzung abgelaufen');const url=status==='Bestätigt'?CONFIRM_FUNCTION_URL:CUSTOMER_FUNCTION_URL;const body=status==='Bestätigt'?{request:r}:{request:r,status,...extra};const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},body:JSON.stringify(body)});if(!response.ok){const t=await response.text();throw new Error(t||'E-Mail konnte nicht gesendet werden')}return response.json()}
+function estimatedEnd(r){
+  const hours=Number(r.duration_hours);
+  if(!r.requested_date||!/^\\d{2}:\\d{2}$/.test(r.requested_time||'')||!Number.isFinite(hours)||hours<=0)return '—';
+  const start=new Date(r.requested_date+'T'+r.requested_time+':00');
+  if(Number.isNaN(start.getTime()))return '—';
+  return new Date(start.getTime()+hours*3600000).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'});
+}
 async function syncCalendarForRequest(previous,updated){
   const customer=`${updated.first_name||''} ${updated.last_name||''}`.trim() || 'Kunde';
   const marker=`Kundentermin – ${customer} – ${updated.service_type||'Leistung'}`;
   const {error:delError}=await db.from('personal_calendar_events').delete().eq('title',marker);
-  if(delError) throw new Error('Kalendereintrag konnte nicht bereinigt werden: '+delError.message);
-  if(updated.status!=='Bestätigt' || !updated.requested_date || !updated.requested_time) return;
-  const start=new Date(`${updated.requested_date}T${String(updated.requested_time).slice(0,8)}`);
-  if(Number.isNaN(start.getTime())) throw new Error('Ungültiges Termin-Datum oder ungültige Uhrzeit.');
-  let hours=2;
-  const st=String(updated.service_type||'').toLowerCase();
-  const opts=Array.isArray(updated.care_options)?updated.care_options.map(x=>String(x).toLowerCase()):[];
-  if(st.includes('garten')) hours=Math.max(4,opts.length*4);
-  else if(st.includes('fahrzeug')){
-    let total=0; opts.forEach(o=>{if(o.includes('außenreinigung'))total+=2;else if(o.includes('innenraumreinigung'))total+=4;else if(o.includes('polsterreinigung'))total+=4;else if(o.includes('komplettaufbereitung'))total+=8;else if(o.includes('politur'))total+=8;else if(o.includes('lackversiegelung'))total+=8}); hours=total||2;
-  }
+  if(delError)throw new Error('Kalendereintrag konnte nicht bereinigt werden: '+delError.message);
+  if(updated.status!=='Bestätigt'||!updated.requested_date||!updated.requested_time)return;
+  const {data:latest,error:loadError}=await db.from('requests').select('duration_hours,duration_label').eq('id',updated.id).single();
+  if(loadError)throw new Error('Gespeicherte Auftragsdauer konnte nicht geladen werden: '+loadError.message);
+  const hours=Number(latest?.duration_hours||updated.duration_hours||2);
+  if(!Number.isFinite(hours)||hours<=0)throw new Error('Die berechnete Arbeitsdauer ist ungültig.');
+  const start=new Date(`${updated.requested_date}T${String(updated.requested_time).slice(0,5)}:00`);
+  if(Number.isNaN(start.getTime()))throw new Error('Ungültiges Termin-Datum oder ungültige Uhrzeit.');
   const end=new Date(start.getTime()+hours*3600000);
-  const {error:insError}=await db.from('personal_calendar_events').insert({title:marker,event_type:st.includes('garten')?'garden':st.includes('fahrzeug')?'vehicle':'other',start_time:start.toISOString(),end_time:end.toISOString()});
-  if(insError) throw new Error('Kalendereintrag konnte nicht erstellt werden: '+insError.message);
+  const st=String(updated.service_type||'').toLowerCase();
+  const {error:insError}=await db.from('personal_calendar_events').insert({
+    title:marker,
+    event_type:st.includes('garten')?'garden':st.includes('fahrzeug')?'vehicle':'other',
+    start_time:start.toISOString(),
+    end_time:end.toISOString(),
+    blocks_customer_bookings:true,
+    source:'customer_request'
+  });
+  if(insError)throw new Error('Kalendereintrag konnte nicht erstellt werden: '+insError.message);
 }
 
 async function updateRequest(id,changes,emailStatus){const current=requests.find(x=>x.id===id);if(!current)return false;const {error}=await db.from('requests').update(changes).eq('id',id);if(error){alert('Fehler: '+error.message);return false}const updated={...current,...changes};try{await syncCalendarForRequest(current,updated)}catch(err){alert('Anfrage wurde gespeichert, aber der Kalender konnte nicht synchronisiert werden.\n\n'+err.message)}if(emailStatus){try{await sendCustomerEmail(updated,emailStatus,{old_status:current.status})}catch(err){alert('Anfrage wurde gespeichert, aber die Kunden-E-Mail konnte nicht gesendet werden.\n\n'+err.message)}}await load();return true}
