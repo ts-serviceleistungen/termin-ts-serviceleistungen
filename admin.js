@@ -97,6 +97,17 @@ const invoicePaymentMessage=document.getElementById('invoicePaymentMessage');
 const invoicePaymentClose=document.getElementById('invoicePaymentClose');
 const invoicePaymentCancel=document.getElementById('invoicePaymentCancel');
 let currentPaymentInvoiceId=null;
+const invoiceEmailModal=document.getElementById('invoiceEmailModal');
+const invoiceEmailForm=document.getElementById('invoiceEmailForm');
+const invoiceEmailInfo=document.getElementById('invoiceEmailInfo');
+const invoiceEmailRecipient=document.getElementById('invoiceEmailRecipient');
+const invoiceEmailSubject=document.getElementById('invoiceEmailSubject');
+const invoiceEmailMessage=document.getElementById('invoiceEmailMessage');
+const invoiceEmailStatus=document.getElementById('invoiceEmailStatus');
+const invoiceEmailSendBtn=document.getElementById('invoiceEmailSendBtn');
+const invoiceEmailClose=document.getElementById('invoiceEmailClose');
+const invoiceEmailCancel=document.getElementById('invoiceEmailCancel');
+let currentEmailInvoiceId=null;
 const invoicePreviewModal = document.getElementById('invoicePreviewModal');
 const invoicePreviewFrame = document.getElementById('invoicePreviewFrame');
 const invoicePreviewMeta = document.getElementById('invoicePreviewMeta');
@@ -1313,7 +1324,7 @@ async function loadIssuedInvoices(){
   if(!issuedInvoiceList)return;
   issuedInvoiceList.innerHTML='<p>Neue Rechnungen werden geladen…</p>';
   try{
-    const {data,error}=await db.from('issued_invoices').select('*,invoice_items(*),invoice_payments(*),invoice_documents(*)').order('created_at',{ascending:false});
+    const {data,error}=await db.from('issued_invoices').select('*,invoice_items(*),invoice_payments(*),invoice_documents(*),invoice_email_logs(*)').order('created_at',{ascending:false});
     if(error)throw error;
     currentIssuedInvoices=data||[];
     renderIssuedInvoices();
@@ -1343,6 +1354,7 @@ function renderIssuedInvoices(){
       : (hasPdf?'<button type="button" class="secondary-btn" data-invoice-download="'+inv.id+'" data-kind="pdf">PDF herunterladen</button>':'')+
         (hasXml?'<button type="button" class="secondary-btn" data-invoice-download="'+inv.id+'" data-kind="xrechnung_xml">XRechnung XML</button>':'')+
         '<button type="button" class="secondary-btn" data-invoice-generate-docs="'+inv.id+'">Dokumente (neu) erzeugen</button>'+
+        (inv.status==='issued'&&inv.document_type==='invoice'&&hasPdf?'<button type="button" class="gold-btn" data-invoice-email="'+inv.id+'">Per E-Mail senden</button>':'')+
         (inv.status==='issued'&&inv.document_type==='invoice'?(paidAmount<=0?'<button type="button" class="danger-btn" data-invoice-cancel="'+inv.id+'">Stornieren</button>':'<button type="button" class="secondary-btn" disabled title="Vor Stornierung erst Zahlung/Rückerstattung klären">Stornierung nach Zahlung klären</button>')+'<button type="button" class="secondary-btn" data-invoice-payment="'+inv.id+'">Zahlung erfassen</button>':'');
     return '<article class="issued-invoice-card"><div class="issued-invoice-top"><div><span class="eyebrow">'+(inv.document_type==='cancellation'?'STORNORECHNUNG':'RECHNUNG')+'</span><h3>'+escapeHtml(num)+'</h3><p>'+escapeHtml(inv.customer_company||inv.customer_name)+' · '+escapeHtml(date)+'</p></div><div class="issued-invoice-amount">'+euro(total)+'</div></div><div class="issued-invoice-meta"><span class="invoice-status '+badgeClass+'">'+paymentStatus+'</span><span>Bezahlt: '+euro(paidAmount)+'</span><span>Offen: '+euro(Math.max(0,total-paidAmount))+'</span></div><div class="issued-invoice-actions">'+actions+'</div>'+(inv.cancellation_invoice_id?'<small>Stornobeleg vorhanden.</small>':'')+'</article>';
   }).join('');
@@ -1703,6 +1715,32 @@ async function saveInvoicePayment(event){
   closeInvoicePayment();
   await loadIssuedInvoices();
   alert('Zahlungseingang wurde gespeichert.');
+}
+function openInvoiceEmail(id){
+  const inv=currentIssuedInvoices.find(x=>x.id===id);
+  if(!inv||inv.status!=='issued'||inv.document_type!=='invoice')return;
+  if(!(inv.invoice_documents||[]).some(d=>d.document_kind==='pdf')){alert('Es fehlt das archivierte PDF. Bitte zuerst Dokumente neu erzeugen.');return;}
+  currentEmailInvoiceId=id;
+  invoiceEmailInfo.textContent=(inv.invoice_number||'Rechnung')+' · '+(inv.customer_company||inv.customer_name)+' · '+euro(inv.total);
+  invoiceEmailRecipient.value=inv.customer_email||'';
+  invoiceEmailSubject.value='Ihre Rechnung '+(inv.invoice_number||'');
+  invoiceEmailMessage.value='Sehr geehrte Damen und Herren,\n\nanbei erhalten Sie Ihre Rechnung '+(inv.invoice_number||'')+' als PDF.\n\nBitte überweisen Sie den Rechnungsbetrag innerhalb der angegebenen Zahlungsfrist.\n\nVielen Dank für Ihren Auftrag.\n\nMit freundlichen Grüßen\nT.S. Serviceleistungen\nThomas Schwetz';
+  invoiceEmailStatus.classList.add('hidden');invoiceEmailModal.classList.remove('hidden');
+}
+function closeInvoiceEmail(){invoiceEmailModal?.classList.add('hidden');currentEmailInvoiceId=null;}
+async function sendInvoiceEmail(event){
+  event.preventDefault();const inv=currentIssuedInvoices.find(x=>x.id===currentEmailInvoiceId);if(!inv)return;
+  const recipient=invoiceEmailRecipient.value.trim();
+  if(!recipient||!recipient.includes('@')){invoiceEmailStatus.textContent='Bitte eine gültige Empfängeradresse eingeben.';invoiceEmailStatus.classList.remove('hidden');return;}
+  invoiceEmailSendBtn.disabled=true;invoiceEmailSendBtn.textContent='Wird gesendet…';invoiceEmailStatus.classList.add('hidden');
+  try{
+    const sessionResult=await db.auth.getSession();const session=sessionResult.data.session;
+    if(!session?.access_token)throw new Error('Deine Anmeldung ist abgelaufen. Bitte neu anmelden.');
+    const response=await fetch(window.SUPABASE_URL+'/functions/v1/send-invoice-email',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':window.SUPABASE_PUBLISHABLE_KEY},body:JSON.stringify({invoice_id:inv.id,recipient,subject:invoiceEmailSubject.value.trim(),message:invoiceEmailMessage.value.trim()})});
+    const result=await response.json();if(!response.ok||!result.ok)throw new Error(result.error||'E-Mail konnte nicht versendet werden.');
+    closeInvoiceEmail();await loadIssuedInvoices();alert('Rechnung wurde vom Mailserver zum Versand angenommen. Empfänger: '+recipient);
+  }catch(error){invoiceEmailStatus.textContent='Versand fehlgeschlagen: '+error.message;invoiceEmailStatus.classList.remove('hidden');}
+  finally{invoiceEmailSendBtn.disabled=false;invoiceEmailSendBtn.textContent='E-Mail jetzt senden';}
 }
 async function downloadInvoiceDocument(id,kind){
   const {data:doc,error}=await db.from('invoice_documents').select('*').eq('invoice_id',id).eq('document_kind',kind).maybeSingle();
@@ -2602,6 +2640,10 @@ invoicePaymentForm?.addEventListener('submit',saveInvoicePayment);
 invoicePaymentClose?.addEventListener('click',closeInvoicePayment);
 invoicePaymentCancel?.addEventListener('click',closeInvoicePayment);
 invoicePaymentModal?.addEventListener('click',e=>{if(e.target===invoicePaymentModal)closeInvoicePayment();});
+invoiceEmailForm?.addEventListener('submit',sendInvoiceEmail);
+invoiceEmailClose?.addEventListener('click',closeInvoiceEmail);
+invoiceEmailCancel?.addEventListener('click',closeInvoiceEmail);
+invoiceEmailModal?.addEventListener('click',e=>{if(e.target===invoiceEmailModal)closeInvoiceEmail();});
 invoiceDraftForm?.addEventListener('submit',createInvoiceDraft);
 invoicePreviewBtn?.addEventListener('click',()=>createInvoiceDraft(null,{preview:true}));
 invoiceNewBtn?.addEventListener('click',async()=>{resetInvoiceDraft();invoiceDraftForm.classList.remove('hidden');invoiceSetField('invoiceServiceDate',new Date().toLocaleDateString('sv-SE'));await ensureInvoiceSources();invoiceDraftForm.scrollIntoView({behavior:'smooth',block:'start'});});
@@ -2620,6 +2662,7 @@ invoiceSourceOrder?.addEventListener('change',onInvoiceSourceOrder);
 invoiceSourceOffer?.addEventListener('change',onInvoiceSourceOffer);
 issuedInvoiceSearch?.addEventListener('input',renderIssuedInvoices);
 issuedInvoiceList?.addEventListener('click',async e=>{
+  const email=e.target.closest('[data-invoice-email]');if(email)return openInvoiceEmail(email.dataset.invoiceEmail);
   const edit=e.target.closest('[data-invoice-edit]');if(edit)return editInvoiceDraft(edit.dataset.invoiceEdit);
   const preview=e.target.closest('[data-invoice-preview]');if(preview){const inv=currentIssuedInvoices.find(x=>x.id===preview.dataset.invoicePreview);return openInvoicePreview(inv);}
   const issue=e.target.closest('[data-invoice-issue]');if(issue)return issueInvoice(issue.dataset.invoiceIssue);
