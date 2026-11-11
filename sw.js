@@ -1,4 +1,4 @@
-const CACHE = 'ts-serviceleistungen-pwa-v20261111-payment-form-1';
+const CACHE = 'ts-serviceleistungen-pwa-v20261111-invoice-email-1';
 const SHELL = [
   './',
   './index.html',
