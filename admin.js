@@ -1422,6 +1422,7 @@ async function loadOffers(forceRefresh=false){
 
     currentOffers=rows;
     renderOffers();
+    renderOrders();
   }catch(err){
     currentOffers=[];
     offerList.innerHTML=`<p class="notice">Angebotsdaten konnten nicht geladen werden: ${escapeHtml(err.message)}</p>`;
@@ -1734,19 +1735,86 @@ async function loadOrders(){
 function renderOrders(){
   if(!orderList)return;
   const q=(orderSearch?.value||'').trim().toLowerCase();
-  const rows=currentOrders.filter(o=>[o.order_number,o.customer_name,o.service_type,o.description].join(' ').toLowerCase().includes(q));
+  const rows=currentOrders.filter(o=>[o.order_number,o.customer_name,o.service_type,o.description,o.notes,o.external_invoice_number].join(' ').toLowerCase().includes(q));
   if(orderCountEl)orderCountEl.textContent=String(currentOrders.length);
   if(orderVolumeEl)orderVolumeEl.textContent=euro(currentOrders.reduce((sum,o)=>sum+Number(o.agreed_amount||0),0));
   if(orderOpenCountEl)orderOpenCountEl.textContent=String(currentOrders.filter(o=>['Offen','Geplant'].includes(o.status)).length);
   if(orderInProgressCountEl)orderInProgressCountEl.textContent=String(currentOrders.filter(o=>o.status==='In Arbeit').length);
   if(orderCompletedCountEl)orderCompletedCountEl.textContent=String(currentOrders.filter(o=>o.status==='Abgeschlossen').length);
   if(!rows.length){orderList.innerHTML='<div class="empty-box">Noch keine passenden Aufträge vorhanden. Du kannst einen Auftrag direkt aus einer Kundenanfrage erstellen.</div>';return;}
-  orderList.innerHTML='<div class="invoice-table"><div class="invoice-row invoice-head"><span>Auftragsnr.</span><span>Kunde</span><span>Leistung</span><span>Termin</span><span>Wert</span><span>Status</span></div>'+rows.map(o=>{
-    const date=o.scheduled_date?formatDate(o.scheduled_date):'Nach Absprache';
-    const time=o.scheduled_time||'';
-    const statuses=['Offen','Geplant','In Arbeit','Abgeschlossen','Storniert'];
-    return '<div class="invoice-row"><span><b>'+escapeHtml(o.order_number)+'</b></span><span>'+escapeHtml(o.customer_name)+'</span><span>'+escapeHtml(o.service_type)+'</span><span>'+escapeHtml(date)+(time?' · '+escapeHtml(time):'')+'</span><span><input type="number" min="0" step="0.01" value="'+Number(o.agreed_amount||0).toFixed(2)+'" data-order-amount="'+escapeHtml(o.id)+'" aria-label="Auftragswert" style="width:110px;max-width:100%;padding:7px;border:1px solid #ddd;border-radius:8px"></span><span><select class="offer-status-select" data-order-status="'+escapeHtml(o.id)+'">'+statuses.map(s=>'<option value="'+s+'" '+(o.status===s?'selected':'')+'>'+s+'</option>').join('')+'</select></span></div>';
-  }).join('')+'</div>';
+  const statuses=['Offen','Geplant','In Arbeit','Abgeschlossen','Storniert'];
+  orderList.innerHTML=rows.map(o=>{
+    const linked=currentOffers.find(x=>x.order_id===o.id);
+    const availableOffers=currentOffers.filter(x=>!x.order_id||x.order_id===o.id);
+    const offerOptions=availableOffers.map(x=>{
+      const number=x.angebotsnummer||'Angebot ohne Nummer';
+      const customer=x.kundenname||x.firma||'';
+      return '<option value="'+escapeHtml(x.id)+'" '+(linked?.id===x.id?'selected':'')+'>'+escapeHtml(number+' · '+customer+' · '+euro(x.betrag||0))+'</option>';
+    }).join('');
+    return `<article class="order-card" data-order-card="${escapeHtml(o.id)}">
+      <div class="order-card-head"><div><span class="eyebrow">AUFTRAG</span><h3>${escapeHtml(o.order_number)}</h3><p>${escapeHtml(o.customer_name)} · ${escapeHtml(o.service_type)}</p></div><span class="order-card-value">${euro(o.agreed_amount||0)}</span></div>
+      <div class="order-fields">
+        <label>Status<select data-order-status="${escapeHtml(o.id)}">${statuses.map(s=>'<option value="'+s+'" '+(o.status===s?'selected':'')+'>'+s+'</option>').join('')}</select></label>
+        <label>Auftragswert (€)<input type="number" min="0" step="0.01" value="${Number(o.agreed_amount||0).toFixed(2)}" data-order-field="agreed_amount"></label>
+        <label>Ausführung am<input type="date" value="${escapeHtml(o.scheduled_date||'')}" data-order-field="scheduled_date"></label>
+        <label>Uhrzeit<input type="time" value="${escapeHtml(o.scheduled_time||'')}" data-order-field="scheduled_time"></label>
+        <label class="order-wide">Zugehöriges Angebot<select data-order-offer="${escapeHtml(o.id)}"><option value="">Kein Angebot verknüpft</option>${offerOptions}</select><small>Hier werden vorhandene Angebote aus dem Angebotsbereich zugeordnet. Neue PDF-Angebote erstellst du weiterhin über deinen bisherigen Ablauf.</small></label>
+        <label>Externe Rechnungsnummer<input type="text" value="${escapeHtml(o.external_invoice_number||'')}" data-order-field="external_invoice_number" placeholder="Wird im Rechnungsprogramm erstellt"></label>
+        <label class="order-wide">Leistungsbeschreibung<textarea rows="2" data-order-field="description">${escapeHtml(o.description||'')}</textarea></label>
+        <label class="order-wide">Interne Notizen<textarea rows="2" data-order-field="notes">${escapeHtml(o.notes||'')}</textarea></label>
+      </div>
+      <div class="order-card-foot"><span>${linked?'Verknüpftes Angebot: '+escapeHtml(linked.angebotsnummer||'ohne Nummer'):'Noch kein Angebot zugeordnet'}</span><button type="button" class="gold-btn" data-order-save="${escapeHtml(o.id)}">Änderungen speichern</button></div>
+    </article>`;
+  }).join('');
+}
+
+async function saveOrderDetails(button){
+  const card=button.closest('[data-order-card]');
+  const order=currentOrders.find(o=>o.id===button.dataset.orderSave);
+  if(!card||!order)return;
+  const value=name=>card.querySelector('[data-order-field="'+name+'"]')?.value??'';
+  const amount=Number(value('agreed_amount'));
+  if(!Number.isFinite(amount)||amount<0){alert('Bitte einen gültigen Auftragswert ab 0,00 € eingeben.');return;}
+  const payload={agreed_amount:amount,scheduled_date:value('scheduled_date')||null,scheduled_time:value('scheduled_time')||null,external_invoice_number:value('external_invoice_number').trim()||null,description:value('description').trim()||null,notes:value('notes').trim()||null,updated_at:new Date().toISOString()};
+  button.disabled=true;
+  try{
+    const {error}=await db.from('orders').update(payload).eq('id',order.id);
+    if(error)throw error;
+    Object.assign(order,payload);
+    renderOrders();
+    alert('Auftrag '+order.order_number+' wurde aktualisiert.');
+  }catch(error){alert('Auftrag konnte nicht gespeichert werden: '+error.message);}
+  finally{button.disabled=false;}
+}
+
+async function saveOrderOfferLink(select){
+  const order=currentOrders.find(o=>o.id===select.dataset.orderOffer);
+  if(!order)return;
+  const nextId=select.value||null;
+  const previous=currentOffers.find(x=>x.order_id===order.id);
+  if((previous?.id||'')===(nextId||''))return;
+  if(nextId&&currentOffers.some(x=>x.id===nextId&&x.order_id&&x.order_id!==order.id)){
+    alert('Dieses Angebot ist bereits einem anderen Auftrag zugeordnet.');
+    renderOrders();
+    return;
+  }
+  select.disabled=true;
+  try{
+    if(previous){
+      const {error}=await db.from('offers').update({order_id:null}).eq('id',previous.id);
+      if(error)throw error;
+      previous.order_id=null;
+    }
+    if(nextId){
+      const {error}=await db.from('offers').update({order_id:order.id}).eq('id',nextId).is('order_id',null);
+      if(error)throw error;
+      const selected=currentOffers.find(x=>x.id===nextId);
+      if(selected)selected.order_id=order.id;
+    }
+    renderOrders();
+    renderOffers();
+  }catch(error){alert('Angebot konnte nicht zugeordnet werden: '+error.message);await loadOffers(false);}
+  finally{select.disabled=false;}
 }
 
 async function saveOrderAmount(input){
@@ -1870,7 +1938,12 @@ document.querySelectorAll('[data-back-dashboard]').forEach(btn=>btn.addEventList
 
 
 orderSearch?.addEventListener('input',renderOrders);
-ordersView?.addEventListener('change',e=>{const select=e.target.closest('[data-order-status]');if(select)saveOrderStatus(select);const amount=e.target.closest('[data-order-amount]');if(amount)saveOrderAmount(amount)});
+ordersView?.addEventListener('change',e=>{
+  const select=e.target.closest('[data-order-status]');if(select)saveOrderStatus(select);
+  const amount=e.target.closest('[data-order-amount]');if(amount)saveOrderAmount(amount);
+  const offer=e.target.closest('[data-order-offer]');if(offer)saveOrderOfferLink(offer);
+});
+ordersView?.addEventListener('click',e=>{const button=e.target.closest('[data-order-save]');if(button)saveOrderDetails(button)});
 
 offerSearch?.addEventListener('input',renderOffers);
 offerStatusFilter?.addEventListener('change',renderOffers);
