@@ -194,3 +194,45 @@ input,select,textarea{width:100%;margin-top:6px;border:1px solid #d9d3c7;backgro
 .danger-btn:hover{background:#fff1f0}
 .danger-btn:disabled{opacity:.55;cursor:wait}
 @media(max-width:600px){.order-card-actions{width:100%}.order-card-actions button{flex:1}}
+
+/* Own invoice module */
+.invoice-app-panel{border:1px solid #e8dcc2}
+.invoice-settings{margin:18px 0;padding:14px 16px;border:1px solid #e8dcc2;border-radius:12px;background:#fff}
+.invoice-settings summary{font-weight:800;cursor:pointer;color:#6e5317}
+.invoice-settings form{margin-top:16px}
+.invoice-tax-note{grid-column:1/-1;padding:12px 14px;border-radius:9px;background:#f8f4e9;color:#66501d;font-size:13px}
+.invoice-draft-form{margin:22px 0;padding:18px;border:1px solid #e5d8b8;border-radius:14px;background:#fffdf8}
+.invoice-draft-form h3{margin:0 0 12px}
+.invoice-items-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:18px 0 10px}
+.invoice-draft-items{display:grid;gap:9px;margin-bottom:16px}
+.invoice-item-row{display:grid;grid-template-columns:minmax(180px,1fr) 110px 140px 42px;gap:9px;align-items:end;padding:10px;border:1px solid #eee4d2;border-radius:10px;background:#fff}
+.invoice-item-row label,.invoice-draft-form>label{display:grid;gap:5px;font-size:13px;font-weight:650}
+.invoice-item-row input,.invoice-draft-form input,.invoice-draft-form textarea,.invoice-settings input{width:100%;min-width:0;padding:10px;border:1px solid #d8d1c3;border-radius:8px;font:inherit}
+.invoice-draft-form textarea{margin-top:6px}
+.invoice-draft-form .form-actions,.invoice-settings .form-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px}
+.form-message{font-size:13px;color:#655}
+.secondary-btn{border:1px solid #d6c9aa;background:#fff;color:#4e421f;border-radius:9px;padding:9px 12px;font-weight:700;cursor:pointer}
+.secondary-btn:hover{background:#f8f4e9}
+.issued-invoice-card{margin:12px 0;padding:16px;border:1px solid #e8dfcf;border-radius:13px;background:#fff}
+.issued-invoice-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.issued-invoice-top h3{margin:4px 0;font-size:18px}
+.issued-invoice-top p{margin:3px 0;color:#777;font-size:13px}
+.issued-invoice-amount{font-weight:800;font-size:18px;white-space:nowrap}
+.issued-invoice-meta{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:12px 0;color:#666;font-size:13px}
+.invoice-status{display:inline-flex;border-radius:999px;padding:5px 9px;font-weight:750}
+.invoice-status-open{background:#fff3d5;color:#795500}
+.invoice-status-paid{background:#e5f5e9;color:#176534}
+.invoice-status-partial{background:#eaf1ff;color:#244f91}
+.invoice-status-cancelled{background:#fce8e6;color:#a12b22}
+.invoice-status-draft{background:#eee;color:#555}
+.issued-invoice-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.issued-invoice-actions button{font-size:13px}
+.legacy-invoices-panel{margin-top:20px}
+@media(max-width:700px){
+  .invoice-item-row{grid-template-columns:1fr 1fr}
+  .invoice-item-row label:first-child{grid-column:1/-1}
+  .invoice-items-head{align-items:flex-start;flex-direction:column}
+  .issued-invoice-top{flex-direction:column}
+  .issued-invoice-amount{font-size:17px}
+  .issued-invoice-actions button{flex:1 1 145px}
+}
