@@ -1472,6 +1472,18 @@ function renderCustomers(){
       const invoiceName=norm(inv.kunde);
       return !!invoiceName && customerNames.includes(invoiceName);
     });
+    // Anfragen werden ausschließlich über die exakt übereinstimmende E-Mail-Adresse zugeordnet.
+    // Eine Namensähnlichkeit allein reicht bewusst nicht aus, um Kundendaten falsch zu verknüpfen.
+    const customerEmail=String(c.email||'').trim().toLowerCase();
+    const relatedRequests=customerEmail?requests
+      .filter(r=>String(r.email||'').trim().toLowerCase()===customerEmail)
+      .sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))):[];
+    const requestsHtml=relatedRequests.length?relatedRequests.map(r=>{
+      const requestDate=r.requested_date?formatDate(r.requested_date):(r.created_at?new Date(r.created_at).toLocaleDateString('de-DE'):'—');
+      const vehicle=[r.make,r.model].filter(Boolean).join(' ')||r.vehicle_type||'';
+      const status=r.status||'Neue Anfrage';
+      return '<div class="related-document"><span><b>'+escapeHtml(r.service_type||'Anfrage')+'</b> · '+escapeHtml(requestDate)+' · '+escapeHtml(status)+'<br><small>'+escapeHtml(vehicle||r.details||'')+(r.requested_time?' · '+escapeHtml(r.requested_time):'')+(r.duration_label?' · '+escapeHtml(r.duration_label):'')+'</small></span><span><button type="button" class="small-btn" data-customer-request-details="'+escapeHtml(r.id)+'">Ansehen</button></span></div>';
+    }).join(''):'<p class="related-empty">Keine eindeutig zugeordneten Anfragen.</p>';
     const offersHtml=relatedOffers.length?relatedOffers.map(o=>{
       const number=o.angebotsnummer||o.angebotsnr||'—';
       const date=o.datum||o.angebotsdatum||'—';
@@ -1489,7 +1501,8 @@ function renderCustomers(){
         '<div style="margin-top:4px;color:#555">'+escapeHtml(c.telefon||'')+(c.telefon&&c.email?' · ':'')+escapeHtml(c.email||'')+'</div></div>'+
         '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="small-btn" data-customer-edit="'+escapeHtml(c.id)+'">Bearbeiten</button><button type="button" class="small-btn" data-customer-delete="'+escapeHtml(c.id)+'">Löschen</button></div>'+
       '</div>'+
-      '<div class="customer-documents" style="margin-top:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px">'+
+      '<div class="customer-documents" style="margin-top:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px">'+
+        '<div><h3 style="margin:0 0 8px">Anfragen ('+relatedRequests.length+')</h3>'+requestsHtml+'</div>'+
         '<div><h3 style="margin:0 0 8px">Angebote ('+relatedOffers.length+')</h3>'+offersHtml+'</div>'+
         '<div><h3 style="margin:0 0 8px">Rechnungen ('+relatedInvoices.length+')</h3>'+invoicesHtml+'</div>'+
       '</div></div>';
@@ -1537,7 +1550,7 @@ async function loadBestandskunden(){
   if(customerList)customerList.innerHTML='<p>Kunden, Rechnungen und Angebote werden geladen...</p>';
   try{
     // Erst die beiden Dokumentenlisten laden, damit die Kundenansicht aktuelle Daten verwendet.
-    await Promise.all([loadInvoices(),loadOffers(false)]);
+    await Promise.all([load(),loadInvoices(),loadOffers(false)]);
     await loadCustomers();
     await linkExistingOffersToCustomers();
     renderCustomers();
@@ -1741,6 +1754,8 @@ customerSearch?.addEventListener('input',renderCustomers);
 customerForm?.addEventListener('submit',saveCustomer);
 cancelCustomerBtn?.addEventListener('click',resetCustomerForm);
 customerList?.addEventListener('click',e=>{
+  const request=e.target.closest('[data-customer-request-details]');
+  if(request)return openDetails(request.dataset.customerRequestDetails);
   const edit=e.target.closest('[data-customer-edit]');
   if(edit)return editCustomer(edit.dataset.customerEdit);
   const del=e.target.closest('[data-customer-delete]');
