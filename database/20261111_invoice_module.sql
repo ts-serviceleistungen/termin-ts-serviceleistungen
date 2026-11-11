@@ -228,3 +228,14 @@ begin
 end; $$;
 revoke all on function public.cancel_issued_invoice(uuid,text) from public,anon;
 grant execute on function public.cancel_issued_invoice(uuid,text) to authenticated;
+
+-- Cover foreign keys used by invoice lists and payment/event lookups.
+create index if not exists invoice_events_invoice_id_idx on public.invoice_events(invoice_id,created_at desc);
+create index if not exists invoice_items_invoice_id_position_idx on public.invoice_items(invoice_id,position);
+create index if not exists invoice_payments_invoice_id_date_idx on public.invoice_payments(invoice_id,payment_date);
+create index if not exists issued_invoices_cancellation_invoice_id_idx on public.issued_invoices(cancellation_invoice_id);
+create index if not exists issued_invoices_original_invoice_id_idx on public.issued_invoices(original_invoice_id);
+create index if not exists issued_invoices_customer_id_idx on public.issued_invoices(customer_id);
+create index if not exists issued_invoices_offer_id_idx on public.issued_invoices(offer_id);
+create index if not exists issued_invoices_order_id_idx on public.issued_invoices(order_id);
+create index if not exists issued_invoices_created_at_idx on public.issued_invoices(created_at desc);
