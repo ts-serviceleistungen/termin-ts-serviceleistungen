@@ -1,4 +1,4 @@
-const CACHE = 'ts-serviceleistungen-pwa-v20261111-notify-status-1';
+const CACHE = 'ts-serviceleistungen-pwa-v20261111-assets-2';
 const SHELL = [
   './',
   './index.html',
@@ -13,12 +13,12 @@ const SHELL = [
   './foto-drohnen.html',
   './foto-drohnen.js',
   './manifest.json',
-  './assets/icon-192.png',
-  './assets/icon-512.png',
-  './assets/ts-logo-left.png',
-  './assets/ts-logo-right.png',
-  './assets/bmw-m3-hero.png',
-  './assets/admin-hero-reference.jpg'
+  './icon-192.png',
+  './icon-512.png',
+  './ts-logo-left.png',
+  './ts-logo-right.png',
+  './bmw-m3-hero.png',
+  './admin-hero-reference.jpg'
 ];
 
 self.addEventListener('install', event => {
