@@ -1,4 +1,4 @@
-const CACHE = 'ts-serviceleistungen-pwa-v20261111-original-invoice-layout-4';
+const CACHE = 'ts-serviceleistungen-pwa-v20261111-original-invoice-layout-5';
 const SHELL = [
   './',
   './index.html',
