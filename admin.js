@@ -245,12 +245,30 @@ async function openDetails(id){selectedRequest=requests.find(x=>x.id===id);if(!s
 async function loadRequestPhotos(requestId){const gallery=document.getElementById('photoGallery');if(!gallery)return;const {data,error}=await db.from('request_photos').select('storage_path,created_at').eq('request_id',requestId).order('created_at',{ascending:true});if(error){gallery.innerHTML=`<p class="notice">Fotos konnten nicht geladen werden: ${escapeHtml(error.message)}</p>`;return}if(!data||!data.length){gallery.innerHTML='<p>Keine Fotos vorhanden.</p>';return}const items=[];for(const photo of data){const {data:urlData,error:urlError}=await db.storage.from('vehicle-photos').createSignedUrl(photo.storage_path,3600);if(urlError||!urlData?.signedUrl){items.push(`<div class="photo-item"><p>Foto konnte nicht geladen werden.</p></div>`)}else{items.push(`<a class="photo-item" href="${escapeHtml(urlData.signedUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(urlData.signedUrl)}" alt="Fahrzeugfoto" loading="lazy"></a>`)}}gallery.innerHTML=`<h3>Fahrzeugfotos</h3><div class="photo-grid">${items.join('')}</div>`}
 function closeDetails(){modal.classList.add('hidden');selectedRequest=null}
 async function sendCustomerEmail(r,status,extra={}){const {data:{session}}=await db.auth.getSession();if(!session)throw new Error('Admin-Sitzung abgelaufen');const url=status==='Bestätigt'?CONFIRM_FUNCTION_URL:CUSTOMER_FUNCTION_URL;const body=status==='Bestätigt'?{request:r}:{request:r,status,...extra};const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},body:JSON.stringify(body)});if(!response.ok){const t=await response.text();throw new Error(t||'E-Mail konnte nicht gesendet werden')}return response.json()}
+function buildVehicleCalendarSegments(date,time,hours){
+  let remaining=Number(hours),first=true,day=new Date(date+'T12:00:00');
+  const segments=[];
+  while(remaining>0){
+    let start;
+    if(first)start=new Date(date+'T'+time+':00');
+    else{
+      day.setDate(day.getDate()+1);
+      while(day.getDay()===0||day.getDay()===6)day.setDate(day.getDate()+1);
+      start=new Date(day.getFullYear(),day.getMonth(),day.getDate(),8,0,0,0);
+    }
+    const part=Math.min(remaining,8),end=new Date(start.getTime()+part*3600000);
+    segments.push({start,end});remaining-=part;first=false;
+  }
+  return segments;
+}
 function estimatedEnd(r){
   const hours=Number(r.duration_hours);
   if(!r.requested_date||!/^[0-9]{2}:[0-9]{2}$/.test(r.requested_time||'')||!Number.isFinite(hours)||hours<=0)return '—';
-  const start=new Date(r.requested_date+'T'+r.requested_time+':00');
-  if(Number.isNaN(start.getTime()))return '—';
-  return new Date(start.getTime()+hours*3600000).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'});
+  const segments=String(r.service_type||'').toLowerCase().includes('fahrzeug')
+    ? buildVehicleCalendarSegments(r.requested_date,r.requested_time,hours)
+    : [{start:new Date(r.requested_date+'T'+r.requested_time+':00'),end:new Date(new Date(r.requested_date+'T'+r.requested_time+':00').getTime()+hours*3600000)}];
+  const end=segments[segments.length-1]?.end;
+  return end&&!Number.isNaN(end.getTime())?end.toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'}):'—';
 }
 async function syncCalendarForRequest(previous,updated){
   const customer=`${updated.first_name||''} ${updated.last_name||''}`.trim() || 'Kunde';
@@ -264,18 +282,20 @@ async function syncCalendarForRequest(previous,updated){
   if(!Number.isFinite(hours)||hours<=0)throw new Error('Die berechnete Arbeitsdauer ist ungültig.');
   const requestedClock=String(updated.requested_time||'');
   const startClock=/^[0-9]{2}:[0-9]{2}$/.test(requestedClock)?requestedClock:(requestedClock.startsWith('13')?'13:00':requestedClock.startsWith('15')?'15:00':requestedClock.startsWith('10')?'10:00':'08:00');
-  const start=new Date(`${updated.requested_date}T${startClock}:00`);
-  if(Number.isNaN(start.getTime()))throw new Error('Ungültiges Termin-Datum oder ungültige Uhrzeit.');
-  const end=new Date(start.getTime()+hours*3600000);
   const st=String(updated.service_type||'').toLowerCase();
-  const {error:insError}=await db.from('personal_calendar_events').insert({
+  const segments=st.includes('fahrzeug')
+    ? buildVehicleCalendarSegments(updated.requested_date,startClock,hours)
+    : [{start:new Date(`${updated.requested_date}T${startClock}:00`),end:new Date(new Date(`${updated.requested_date}T${startClock}:00`).getTime()+hours*3600000)}];
+  const events=segments.map(segment=>({
     title:marker,
     event_type:st.includes('garten')?'garden':st.includes('fahrzeug')?'vehicle':'other',
-    start_time:start.toISOString(),
-    end_time:end.toISOString(),
+    start_time:segment.start.toISOString(),
+    end_time:segment.end.toISOString(),
     blocks_customer_bookings:true,
-    source:'customer_request'
-  });
+    source:'customer_request',
+    notes:'Anfrage-ID: '+updated.id
+  }));
+  const {error:insError}=await db.from('personal_calendar_events').insert(events);
   if(insError)throw new Error('Kalendereintrag konnte nicht erstellt werden: '+insError.message);
 }
 
