@@ -51,6 +51,13 @@ const openEl = document.getElementById('open');
 const todayEl = document.getElementById('today');
 const dashboardHome = document.getElementById('dashboardHome');
 const requestsView = document.getElementById('requestsView');
+const ordersView = document.getElementById('ordersView');
+const orderList = document.getElementById('orderList');
+const orderSearch = document.getElementById('orderSearch');
+const orderCountEl = document.getElementById('orderCount');
+const orderOpenCountEl = document.getElementById('orderOpenCount');
+const orderInProgressCountEl = document.getElementById('orderInProgressCount');
+const orderCompletedCountEl = document.getElementById('orderCompletedCount');
 const receiptsView = document.getElementById('receiptsView');
 const invoicesView = document.getElementById('invoicesView');
 const offersView = document.getElementById('offersView');
@@ -205,13 +212,15 @@ let appointmentDate = new Date();
 let appointmentView = 'day';
 let calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let requests=[];let selectedRequest=null;
+let currentOrders=[];
+let orderRequestIds=new Set();
 let currentInvoiceTotal=null;
 let currentReceiptTotal=null;
 
 function escapeHtml(value){return String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;')}
 function formatDate(value){if(!value)return '—';const d=new Date(value+'T00:00:00');return Number.isNaN(d.getTime())?value:d.toLocaleDateString('de-DE')}
 function showLoginMessage(message){loginMsg.textContent=message;loginMsg.classList.remove('hidden')}
-async function init(){const {data,error}=await db.auth.getSession();if(error){showLoginMessage(error.message);return}const session=data.session;if(!session){loginEl.classList.remove('hidden');dashEl.classList.add('hidden');return}loginEl.classList.add('hidden');dashEl.classList.remove('hidden');if(userEl) userEl.textContent=session.user.email||'';showView('dashboard');await load();await loadReceipts();await loadFinancials();await loadInvoices();await loadOffers(false)}
+async function init(){const {data,error}=await db.auth.getSession();if(error){showLoginMessage(error.message);return}const session=data.session;if(!session){loginEl.classList.remove('hidden');dashEl.classList.add('hidden');return}loginEl.classList.add('hidden');dashEl.classList.remove('hidden');if(userEl) userEl.textContent=session.user.email||'';showView('dashboard');await load();await loadOrders();await loadReceipts();await loadFinancials();await loadInvoices();await loadOffers(false)}
 async function load(){
   listEl.innerHTML='<p>Aktualisiere Anfragen...</p>';
   const {data,error}=await db.from('requests').select('*').order('created_at',{ascending:false});
@@ -220,6 +229,7 @@ async function load(){
     return;
   }
   requests=data||[];
+  await loadOrders();
   const newCount=requests.filter(x=>x.status==='Neue Anfrage').length;
   const openCount=requests.filter(x=>!['Abgelehnt','Abgeschlossen'].includes(x.status)).length;
   const today=new Date().toLocaleDateString('sv-SE');
@@ -237,11 +247,11 @@ async function load(){
     return;
   }
 
-  listEl.innerHTML=requests.map(x=>`<div class="row request-row"><div><b>${escapeHtml(x.first_name)} ${escapeHtml(x.last_name)}</b><small>${escapeHtml(x.phone)}<br>${escapeHtml(x.email)}</small></div><div><b>${escapeHtml(x.make)} ${escapeHtml(x.model)}</b><small>${escapeHtml(x.vehicle_type)}${x.vehicle_class ? ' · '+escapeHtml(x.vehicle_class) : ''} · ${escapeHtml(x.color)}</small></div><div><b>${escapeHtml(x.service_type)}</b><small>${formatDate(x.requested_date)} · ${escapeHtml(x.requested_time||'—')}</small></div><div><span class="badge">${escapeHtml(x.status||'Neue Anfrage')}</span><br><button data-action="details" data-id="${x.id}">Details</button><button data-action="confirm" data-id="${x.id}">Bestätigen</button><button data-action="alternative" data-id="${x.id}">Alternative</button><button data-action="reject" data-id="${x.id}">Ablehnen</button><button data-action="delete" data-id="${x.id}">Löschen</button></div></div>`).join('');
+  listEl.innerHTML=requests.map(x=>`<div class="row request-row"><div><b>${escapeHtml(x.first_name)} ${escapeHtml(x.last_name)}</b><small>${escapeHtml(x.phone)}<br>${escapeHtml(x.email)}</small></div><div><b>${escapeHtml(x.make)} ${escapeHtml(x.model)}</b><small>${escapeHtml(x.vehicle_type)}${x.vehicle_class ? ' · '+escapeHtml(x.vehicle_class) : ''} · ${escapeHtml(x.color)}</small></div><div><b>${escapeHtml(x.service_type)}</b><small>${formatDate(x.requested_date)} · ${escapeHtml(x.requested_time||'—')}</small></div><div><span class="badge">${escapeHtml(x.status||'Neue Anfrage')}</span><br>${orderRequestIds.has(x.id)?'<button type="button" disabled>Auftrag angelegt</button>':`<button data-action="create-order" data-id="${x.id}">Auftrag erstellen</button>`}<button data-action="details" data-id="${x.id}">Details</button><button data-action="confirm" data-id="${x.id}">Bestätigen</button><button data-action="alternative" data-id="${x.id}">Alternative</button><button data-action="reject" data-id="${x.id}">Ablehnen</button><button data-action="delete" data-id="${x.id}">Löschen</button></div></div>`).join('');
 }
 function field(label,value){return `<div class="detail-field"><small>${escapeHtml(label)}</small><div>${escapeHtml(value||'—')}</div></div>`}
 function arrayValue(value){return Array.isArray(value)&&value.length?value.join(', '):'—'}
-async function openDetails(id){selectedRequest=requests.find(x=>x.id===id);if(!selectedRequest)return;const x=selectedRequest;detailTitle.textContent=`${x.first_name||''} ${x.last_name||''}`.trim()||'Anfrage';detailBody.innerHTML=`<div class="detail-grid">${field('Status',x.status)}${field('Leistung',x.service_type)}${field('Wunschdatum',formatDate(x.requested_date))}${field('Gewünschte Abgabezeit / Arbeitsbeginn',x.requested_time)}${field('Voraussichtliche Arbeitsdauer',x.duration_label|| (x.duration_hours?x.duration_hours+' Stunden':''))}${field('Voraussichtliches Ende',estimatedEnd(x))}${field('Vorname',x.first_name)}${field('Nachname',x.last_name)}${field('Telefon',x.phone)}${field('E-Mail',x.email)}${field('Fahrzeugart',x.vehicle_type)}${field('Fahrzeugklasse',x.vehicle_class)}${field('Hersteller',x.make)}${field('Modell / Typ',x.model)}${field('Farbe',x.color)}${field('Baujahr',x.year)}${field('Kennzeichen',x.plate)}${field('Verschmutzungsgrad',x.dirt_level)}${field('Tierhaare',x.pet_hair)}${field('Menge',x.quantity)}${field('Reifentyp',x.tire_type)}${field('Gewünschte Leistungen',arrayValue(x.care_options))}</div><div class="detail-text">${field('Details / Nachricht',x.details||x.message)}</div><div id="photoGallery" class="photo-gallery"><p>Fotos werden geladen...</p></div>`;detailActions.innerHTML='<button class="primary" data-modal-action="confirm">Termin bestätigen</button><button data-modal-action="alternative">Alternativtermin</button><button data-modal-action="reject">Anfrage ablehnen</button><button data-modal-action="delete">Löschen</button>';modal.classList.remove('hidden');await loadRequestPhotos(x.id)}
+async function openDetails(id){selectedRequest=requests.find(x=>x.id===id);if(!selectedRequest)return;const x=selectedRequest;detailTitle.textContent=`${x.first_name||''} ${x.last_name||''}`.trim()||'Anfrage';detailBody.innerHTML=`<div class="detail-grid">${field('Status',x.status)}${field('Leistung',x.service_type)}${field('Wunschdatum',formatDate(x.requested_date))}${field('Gewünschte Abgabezeit / Arbeitsbeginn',x.requested_time)}${field('Voraussichtliche Arbeitsdauer',x.duration_label|| (x.duration_hours?x.duration_hours+' Stunden':''))}${field('Voraussichtliches Ende',estimatedEnd(x))}${field('Vorname',x.first_name)}${field('Nachname',x.last_name)}${field('Telefon',x.phone)}${field('E-Mail',x.email)}${field('Fahrzeugart',x.vehicle_type)}${field('Fahrzeugklasse',x.vehicle_class)}${field('Hersteller',x.make)}${field('Modell / Typ',x.model)}${field('Farbe',x.color)}${field('Baujahr',x.year)}${field('Kennzeichen',x.plate)}${field('Verschmutzungsgrad',x.dirt_level)}${field('Tierhaare',x.pet_hair)}${field('Menge',x.quantity)}${field('Reifentyp',x.tire_type)}${field('Gewünschte Leistungen',arrayValue(x.care_options))}</div><div class="detail-text">${field('Details / Nachricht',x.details||x.message)}</div><div id="photoGallery" class="photo-gallery"><p>Fotos werden geladen...</p></div>`;detailActions.innerHTML=(orderRequestIds.has(x.id)?'<button type="button" disabled>Auftrag bereits angelegt</button>':'<button class="primary" data-modal-action="create-order">Auftrag erstellen</button>')+'<button class="primary" data-modal-action="confirm">Termin bestätigen</button><button data-modal-action="alternative">Alternativtermin</button><button data-modal-action="reject">Anfrage ablehnen</button><button data-modal-action="delete">Löschen</button>';modal.classList.remove('hidden');await loadRequestPhotos(x.id)}
 async function loadRequestPhotos(requestId){const gallery=document.getElementById('photoGallery');if(!gallery)return;const {data,error}=await db.from('request_photos').select('storage_path,created_at').eq('request_id',requestId).order('created_at',{ascending:true});if(error){gallery.innerHTML=`<p class="notice">Fotos konnten nicht geladen werden: ${escapeHtml(error.message)}</p>`;return}if(!data||!data.length){gallery.innerHTML='<p>Keine Fotos vorhanden.</p>';return}const items=[];for(const photo of data){const {data:urlData,error:urlError}=await db.storage.from('vehicle-photos').createSignedUrl(photo.storage_path,3600);if(urlError||!urlData?.signedUrl){items.push(`<div class="photo-item"><p>Foto konnte nicht geladen werden.</p></div>`)}else{items.push(`<a class="photo-item" href="${escapeHtml(urlData.signedUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(urlData.signedUrl)}" alt="Fahrzeugfoto" loading="lazy"></a>`)}}gallery.innerHTML=`<h3>Fahrzeugfotos</h3><div class="photo-grid">${items.join('')}</div>`}
 function closeDetails(){modal.classList.add('hidden');selectedRequest=null}
 async function sendCustomerEmail(r,status,extra={}){const {data:{session}}=await db.auth.getSession();if(!session)throw new Error('Admin-Sitzung abgelaufen');const url=status==='Bestätigt'?CONFIRM_FUNCTION_URL:CUSTOMER_FUNCTION_URL;const body=status==='Bestätigt'?{request:r}:{request:r,status,...extra};const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${session.access_token}`},body:JSON.stringify(body)});if(!response.ok){const t=await response.text();throw new Error(t||'E-Mail konnte nicht gesendet werden')}return response.json()}
@@ -1704,8 +1714,105 @@ async function handleOfferStatusChange(select){
   }
 }
 
+
+async function loadOrders(){
+  if(!orderList)return;
+  orderList.innerHTML='<p>Aufträge werden geladen…</p>';
+  const {data,error}=await db.from('orders').select('*').order('created_at',{ascending:false});
+  if(error){
+    currentOrders=[];
+    orderRequestIds=new Set();
+    orderList.innerHTML='<p class="notice">Aufträge konnten nicht geladen werden: '+escapeHtml(error.message)+'</p>';
+    renderOrders();
+    return;
+  }
+  currentOrders=data||[];
+  orderRequestIds=new Set(currentOrders.map(o=>o.request_id).filter(Boolean));
+  renderOrders();
+}
+function renderOrders(){
+  if(!orderList)return;
+  const q=(orderSearch?.value||'').trim().toLowerCase();
+  const rows=currentOrders.filter(o=>[o.order_number,o.customer_name,o.service_type,o.description].join(' ').toLowerCase().includes(q));
+  if(orderCountEl)orderCountEl.textContent=String(currentOrders.length);
+  if(orderOpenCountEl)orderOpenCountEl.textContent=String(currentOrders.filter(o=>['Offen','Geplant'].includes(o.status)).length);
+  if(orderInProgressCountEl)orderInProgressCountEl.textContent=String(currentOrders.filter(o=>o.status==='In Arbeit').length);
+  if(orderCompletedCountEl)orderCompletedCountEl.textContent=String(currentOrders.filter(o=>o.status==='Abgeschlossen').length);
+  if(!rows.length){orderList.innerHTML='<div class="empty-box">Noch keine passenden Aufträge vorhanden. Du kannst einen Auftrag direkt aus einer Kundenanfrage erstellen.</div>';return;}
+  orderList.innerHTML='<div class="invoice-table"><div class="invoice-row invoice-head"><span>Auftragsnr.</span><span>Kunde</span><span>Leistung</span><span>Termin</span><span>Wert</span><span>Status</span></div>'+rows.map(o=>{
+    const date=o.scheduled_date?formatDate(o.scheduled_date):'Nach Absprache';
+    const time=o.scheduled_time||'';
+    const statuses=['Offen','Geplant','In Arbeit','Abgeschlossen','Storniert'];
+    return '<div class="invoice-row"><span><b>'+escapeHtml(o.order_number)+'</b></span><span>'+escapeHtml(o.customer_name)+'</span><span>'+escapeHtml(o.service_type)+'</span><span>'+escapeHtml(date)+(time?' · '+escapeHtml(time):'')+'</span><span><b>'+euro(o.agreed_amount||0)+'</b></span><span><select class="offer-status-select" data-order-status="'+escapeHtml(o.id)+'">'+statuses.map(s=>'<option value="'+s+'" '+(o.status===s?'selected':'')+'>'+s+'</option>').join('')+'</select></span></div>';
+  }).join('')+'</div>';
+}
+async function saveOrderStatus(select){
+  const order=currentOrders.find(o=>o.id===select.dataset.orderStatus);
+  if(!order)return;
+  const previous=order.status;
+  const status=select.value;
+  if(status===previous)return;
+  select.disabled=true;
+  const {error}=await db.from('orders').update({status,updated_at:new Date().toISOString()}).eq('id',order.id);
+  if(error){select.value=previous;alert('Auftragsstatus konnte nicht gespeichert werden: '+error.message);}
+  else{order.status=status;renderOrders();}
+  select.disabled=false;
+}
+async function createOrderFromRequest(id){
+  const request=requests.find(r=>r.id===id);
+  if(!request)return;
+  if(orderRequestIds.has(id)){alert('Für diese Anfrage wurde bereits ein Auftrag angelegt.');return;}
+  const customerName=[request.first_name,request.last_name].filter(Boolean).join(' ').trim()||'Kunde';
+  if(!confirm('Aus dieser Anfrage einen Auftrag für '+customerName+' erstellen?\n\nDie ursprüngliche Anfrage bleibt erhalten.'))return;
+  try{
+    let customerId=null;
+    const email=String(request.email||'').trim().toLowerCase();
+    if(email){
+      const {data:matches,error:customerLookupError}=await db.from('customers').select('id').ilike('email',email).order('created_at',{ascending:true}).limit(1);
+      if(customerLookupError)throw customerLookupError;
+      if(matches?.length)customerId=matches[0].id;
+    }
+    if(!customerId){
+      const {data:newCustomer,error:createCustomerError}=await db.from('customers').insert({
+        vorname:request.first_name||null,nachname:request.last_name||null,
+        telefon:request.phone||null,email:request.email||null,land:'Deutschland',
+        notizen:'Automatisch aus Kundenanfrage '+id+' übernommen'
+      }).select('id').single();
+      if(createCustomerError)throw createCustomerError;
+      customerId=newCustomer.id;
+    }
+    const vehicle=[request.make,request.model,request.vehicle_type].filter(Boolean).join(' ');
+    const description=[request.details,request.message,vehicle?('Fahrzeug: '+vehicle):null,
+      request.care_options?.length?('Leistungen: '+request.care_options.join(', ')):null].filter(Boolean).join('\n');
+    const {data:created,error}=await db.from('orders').insert({
+      request_id:request.id,customer_id:customerId,status:'Offen',
+      service_type:request.service_type,customer_name:customerName,
+      customer_email:request.email,customer_phone:request.phone,
+      description:description||request.service_type,
+      scheduled_date:request.requested_date||null,
+      scheduled_time:request.requested_time||null,
+      estimated_hours:request.duration_hours||null,
+      agreed_amount:0
+    }).select('*').single();
+    if(error)throw error;
+    currentOrders.unshift(created);
+    orderRequestIds.add(request.id);
+    renderOrders();
+    await load();
+    alert('Auftrag '+created.order_number+' wurde erfolgreich angelegt.');
+  }catch(error){
+    if(error.code==='23505'){
+      await loadOrders();
+      alert('Für diese Anfrage existiert bereits ein Auftrag.');
+    }else{
+      alert('Auftrag konnte nicht erstellt werden: '+error.message);
+    }
+  }
+}
+
 function showView(view){
   dashboardHome.classList.toggle('hidden',view!=='dashboard');
+  if(ordersView)ordersView.classList.toggle('hidden',view!=='orders');
   requestsView.classList.toggle('hidden',view!=='requests');
   receiptsView.classList.toggle('hidden',view!=='receipts');
   if(invoicesView)invoicesView.classList.toggle('hidden',view!=='invoices');
@@ -1716,6 +1823,7 @@ function showView(view){
 
   if(pageTitle && view==='dashboard')pageTitle.textContent='Dashboard';
   if(pageTitle && view==='requests')pageTitle.textContent='Terminanfragen';
+  if(pageTitle && view==='orders')pageTitle.textContent='Auftragsverwaltung';
   if(pageTitle && view==='receipts')pageTitle.textContent='Belege';
   if(pageTitle && view==='invoices')pageTitle.textContent='Rechnungen';
   if(pageTitle && view==='offers')pageTitle.textContent='Angebote';
@@ -1723,6 +1831,7 @@ function showView(view){
   if(pageTitle && view==='existingCustomers')pageTitle.textContent='Bestandskunden';
 
   if(view==='requests')load();
+  if(view==='orders')loadOrders();
   if(view==='receipts'){
     receiptDate.value=receiptDate.value||new Date().toLocaleDateString('sv-SE');
     loadReceipts();
@@ -1742,6 +1851,9 @@ document.querySelectorAll('[data-nav]').forEach(btn=>{
 
 document.querySelectorAll('[data-back-dashboard]').forEach(btn=>btn.addEventListener('click',()=>{showView('dashboard');window.scrollTo({top:0,behavior:'smooth'});}));
 
+
+orderSearch?.addEventListener('input',renderOrders);
+ordersView?.addEventListener('change',e=>{const select=e.target.closest('[data-order-status]');if(select)saveOrderStatus(select)});
 
 offerSearch?.addEventListener('input',renderOffers);
 offerStatusFilter?.addEventListener('change',renderOffers);
@@ -1828,8 +1940,8 @@ nextMonthBtn?.addEventListener('click',()=>{
 });
 
 
-listEl.addEventListener('click',async e=>{const button=e.target.closest('button[data-action]');if(!button)return;const id=button.dataset.id;const action=button.dataset.action;if(action==='details')return openDetails(id);if(action==='confirm')return confirmRequest(id);if(action==='reject')return rejectRequest(id);if(action==='alternative')return alternativeRequest(id);if(action==='delete')return deleteRequest(id)});
-detailActions.addEventListener('click',async e=>{const button=e.target.closest('button[data-modal-action]');if(!button||!selectedRequest)return;const action=button.dataset.modalAction;if(action==='confirm')await confirmRequest(selectedRequest.id);if(action==='reject')await rejectRequest(selectedRequest.id);if(action==='alternative')await alternativeRequest(selectedRequest.id);if(action==='delete')await deleteRequest(selectedRequest.id)});
+listEl.addEventListener('click',async e=>{const button=e.target.closest('button[data-action]');if(!button)return;const id=button.dataset.id;const action=button.dataset.action;if(action==='details')return openDetails(id);if(action==='create-order')return createOrderFromRequest(id);if(action==='confirm')return confirmRequest(id);if(action==='reject')return rejectRequest(id);if(action==='alternative')return alternativeRequest(id);if(action==='delete')return deleteRequest(id)});
+detailActions.addEventListener('click',async e=>{const button=e.target.closest('button[data-modal-action]');if(!button||!selectedRequest)return;const action=button.dataset.modalAction;if(action==='create-order')await createOrderFromRequest(selectedRequest.id);if(action==='confirm')await confirmRequest(selectedRequest.id);if(action==='reject')await rejectRequest(selectedRequest.id);if(action==='alternative')await alternativeRequest(selectedRequest.id);if(action==='delete')await deleteRequest(selectedRequest.id)});
 closeModal.addEventListener('click',closeDetails);modal.addEventListener('click',e=>{if(e.target===modal)closeDetails()});logoutBtn.addEventListener('click',async()=>{await db.auth.signOut();location.reload()});refreshBtn.addEventListener('click',async()=>{refreshBtn.disabled=true;try{await load();await loadReceipts();await loadFinancials();await loadInvoices();await loadOffers(false);await loadCustomers();}finally{refreshBtn.disabled=false;}});
 refreshOffersBtn?.addEventListener('click',async()=>{refreshOffersBtn.disabled=true;try{await loadOffers(true);}finally{refreshOffersBtn.disabled=false;}});
 init();
