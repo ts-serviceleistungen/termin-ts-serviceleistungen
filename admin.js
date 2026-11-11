@@ -1571,7 +1571,13 @@ async function buildInvoicePdf(inv,items){
   doc.setTextColor(...black);doc.setFont('helvetica','bold');doc.setFontSize(7.5);
   text(sellerName,left,48);
   doc.setFont('helvetica','normal');doc.setFontSize(7.2);
-  text('>',57,48);text(sellerStreet,63,48);text('>',98,48);text(sellerPlace,104,48);
+  const drawArrow=(x,yy)=>{
+    doc.setDrawColor(30,30,30);doc.setLineWidth(0.25);
+    doc.line(x,yy-0.8,x+3,yy-0.8);
+    doc.line(x+1.9,yy-1.8,x+3,yy-0.8);
+    doc.line(x+1.9,yy+0.2,x+3,yy-0.8);
+  };
+  drawArrow(57,48);text(sellerStreet,63,48);drawArrow(98,48);text(sellerPlace,104,48);
 
   const previewNumber=String(inv.invoice_number||'ENTWURF');
   const meta=[
