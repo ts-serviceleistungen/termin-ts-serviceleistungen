@@ -187,3 +187,10 @@ input,select,textarea{width:100%;margin-top:6px;border:1px solid #d9d3c7;backgro
   .admin-content .stat b{font-size:23px}
 }
 @media(max-width:390px){.topbar-heading h1{font-size:17px}.refresh-topbar{font-size:11px;padding:8px}.admin-content .stats-grid{grid-template-columns:1fr 1fr}}
+
+/* Order deletion action */
+.order-card-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.danger-btn{border:1px solid #b42318;background:#fff;color:#b42318;border-radius:9px;padding:10px 14px;font-weight:700;cursor:pointer}
+.danger-btn:hover{background:#fff1f0}
+.danger-btn:disabled{opacity:.55;cursor:wait}
+@media(max-width:600px){.order-card-actions{width:100%}.order-card-actions button{flex:1}}
