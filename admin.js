@@ -1464,18 +1464,22 @@ function buildInvoicePdf(inv,items){
   const title=inv.document_type==='cancellation'?'STORNORECHNUNG':'RECHNUNG';
   let page=1,y=20;
   const addFooter=()=>{
-    doc.setDrawColor(205,195,174);doc.setLineWidth(.25);doc.line(left,270,right,270);
-    doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(65,65,65);
-    doc.text('T.S. Serviceleistungen',left,276);
-    doc.setFont('helvetica','normal');doc.text(sellerStreet,left,281);doc.text(sellerPlace,left,286);doc.text('Deutschland',left,291);
-    doc.setFont('helvetica','bold');doc.text('KONTAKT',82,276);
-    doc.setFont('helvetica','normal');doc.text('TEL. '+sellerPhone,82,281);doc.text('E-MAIL '+sellerEmail,82,286);doc.text('STEUER-NR. '+taxNumber,82,291);
-    doc.setFont('helvetica','bold');doc.text('BANK',151,276);
-    doc.setFont('helvetica','normal');doc.text('IBAN '+iban,151,281);doc.text('BIC '+bic,151,286);doc.text('Inhaber Thomas Schwetz',151,291);
-    doc.setFontSize(7);doc.text(page+'/'+Math.max(page,doc.getNumberOfPages()),right,294,{align:'right'});
+    const totalPages=doc.getNumberOfPages();
+    for(let p=1;p<=totalPages;p++){
+      doc.setPage(p);
+      doc.setDrawColor(205,195,174);doc.setLineWidth(.25);doc.line(left,270,right,270);
+      doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(65,65,65);
+      doc.text('T.S. Serviceleistungen',left,276);
+      doc.setFont('helvetica','normal');doc.text(sellerStreet,left,281);doc.text(sellerPlace,left,286);doc.text('Deutschland',left,291);
+      doc.setFont('helvetica','bold');doc.text('KONTAKT',82,276);
+      doc.setFont('helvetica','normal');doc.text('TEL. '+sellerPhone,82,281);doc.text('E-MAIL '+sellerEmail,82,286);doc.text('STEUER-NR. '+taxNumber,82,291);
+      doc.setFont('helvetica','bold');doc.text('BANK',151,276);
+      doc.setFont('helvetica','normal');doc.text('IBAN '+iban,151,281);doc.text('BIC '+bic,151,286);doc.text('Inhaber Thomas Schwetz',151,291);
+      doc.setFontSize(7);doc.text(p+'/'+totalPages,right,294,{align:'right'});
+    }
   };
   const newPage=()=>{
-    addFooter();doc.addPage();page++;y=22;
+    doc.addPage();page++;y=22;
     doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(30,30,30);
     doc.text(sellerName+' – '+title+' – Fortsetzung',left,y);y+=12;
   };
