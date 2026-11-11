@@ -1503,7 +1503,7 @@ async function buildInvoicePdf(inv,items){
   const fmtDate=value=>value?formatDate(value):'—';
   const money=value=>euro(Number(value||0)).replace(/\s*€/,' EUR');
   const sellerName=safe(s.name||s.seller_name||'T.S. Serviceleistungen');
-  const sellerStreet=safe(s.street||s.seller_street).replace(/,\s*(\d)/,' $1');
+  const sellerStreet=safe(s.street||s.seller_street).replace(/,\s*/g,' ').replace(/\s+/g,' ').trim();
   const sellerPlace=[s.postal_code||s.seller_postal_code,s.city||s.seller_city].filter(Boolean).join(' ');
   const sellerEmail=safe(s.email||s.seller_email||'info@ts-serviceleistungen.de');
   const sellerPhone=safe(s.phone||s.seller_phone);
@@ -1530,7 +1530,7 @@ async function buildInvoicePdf(inv,items){
     if(!logoData)return;
     try{
       const props=doc.getImageProperties(logoData);
-      const maxW=78,maxH=39,scale=Math.min(maxW/props.width,maxH/props.height);
+      const maxW=68,maxH=34,scale=Math.min(maxW/props.width,maxH/props.height);
       const w=props.width*scale,h=props.height*scale;
       doc.addImage(logoData,'PNG',right-w,5,w,h,undefined,'FAST');
     }catch(error){console.warn('Original-Logo konnte nicht in die PDF eingefügt werden:',error);}
@@ -1569,15 +1569,15 @@ async function buildInvoicePdf(inv,items){
   // Kopfbereich exakt nach der hochgeladenen sevDesk-Originalrechnung.
   drawLogo();
   doc.setTextColor(...black);doc.setFont('helvetica','bold');doc.setFontSize(7.5);
-  text(sellerName,left,48);
-  doc.setFont('helvetica','normal');doc.setFontSize(7.2);
+  text(sellerName,left,45);
+  doc.setFont('helvetica','bold');doc.setFontSize(7.2);
   const drawArrow=(x,yy)=>{
     doc.setDrawColor(30,30,30);doc.setLineWidth(0.25);
     doc.line(x,yy-0.8,x+3,yy-0.8);
     doc.line(x+1.9,yy-1.8,x+3,yy-0.8);
     doc.line(x+1.9,yy+0.2,x+3,yy-0.8);
   };
-  drawArrow(57,48);text(sellerStreet,63,48);drawArrow(98,48);text(sellerPlace,104,48);
+  drawArrow(57,45);text(sellerStreet,63,45);drawArrow(98,45);text(sellerPlace,104,45);
 
   const previewNumber=String(inv.invoice_number||'ENTWURF');
   const meta=[
@@ -1587,7 +1587,7 @@ async function buildInvoicePdf(inv,items){
     ['IHRE KUNDENNUMMER',safe(inv.customer_number||'—')],
     ['IHR ANSPRECHPARTNER',safe(s.contact_name||'Thomas Schwetz')]
   ];
-  let metaY=48;
+  let metaY=45;
   meta.forEach(([label,value])=>{
     doc.setFont('helvetica','normal');doc.setFontSize(6.2);doc.setTextColor(55,55,55);
     text(label,124,metaY);
@@ -1598,7 +1598,7 @@ async function buildInvoicePdf(inv,items){
 
   // Empfängeranschrift.
   doc.setTextColor(...black);doc.setFont('helvetica','normal');doc.setFontSize(9);
-  y=58;
+  y=53;
   y+=wrapped(recipient,left,y,95,9,4.5);
   if(inv.customer_name&&inv.customer_company)y+=wrapped(inv.customer_name,left,y,95,9,4.5);
   y+=wrapped(inv.customer_street,left,y,95,9,4.5);
@@ -1606,7 +1606,7 @@ async function buildInvoicePdf(inv,items){
   y+=wrapped('Deutschland',left,y,95,9,4.5);
 
   // Gelbe Rechnungsüberschrift und Datum an den Originalpositionen.
-  y=Math.max(107,y+30);
+  y=Math.max(98,y+24);
   doc.setFont('helvetica','bold');doc.setFontSize(14);doc.setTextColor(...gold);
   text((title==='Stornorechnung'?'Stornorechnung Nr. ':'Rechnungs Nr. ')+(inv.invoice_number||'ENTWURF'),left,y);
   doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(...black);
