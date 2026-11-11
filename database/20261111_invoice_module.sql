@@ -239,3 +239,34 @@ create index if not exists issued_invoices_customer_id_idx on public.issued_invo
 create index if not exists issued_invoices_offer_id_idx on public.issued_invoices(offer_id);
 create index if not exists issued_invoices_order_id_idx on public.issued_invoices(order_id);
 create index if not exists issued_invoices_created_at_idx on public.issued_invoices(created_at desc);
+
+-- XRechnung 3.0 mandatory endpoint/contact data and per-document output mode.
+alter table public.invoice_settings add column if not exists seller_contact_name text;
+alter table public.issued_invoices add column if not exists output_format text not null default 'pdf_xrechnung' check(output_format in ('pdf','pdf_xrechnung'));
+alter table public.issued_invoices add column if not exists seller_identifier text;
+
+-- Reissue RPC with XRechnung-specific mandatory field checks and seller snapshot.
+create or replace function public.issue_invoice(p_invoice_id uuid)
+returns public.issued_invoices language plpgsql security definer set search_path='' as $$
+declare v_invoice public.issued_invoices; declare v_settings public.invoice_settings; declare v_year integer; declare v_next bigint; declare v_subtotal numeric(12,2);
+begin
+  if (select auth.jwt()->>'email') is distinct from 'info@ts-serviceleistungen.de' then raise exception 'Nicht berechtigt'; end if;
+  select * into v_invoice from public.issued_invoices where id=p_invoice_id for update;
+  if not found or v_invoice.status<>'draft' or v_invoice.document_type<>'invoice' then raise exception 'Nur Rechnungsentwürfe können ausgestellt werden'; end if;
+  select * into v_settings from public.invoice_settings where id=1;
+  if not found or coalesce(v_settings.seller_name,'')='' or coalesce(v_settings.seller_street,'')='' or coalesce(v_settings.seller_postal_code,'')='' or coalesce(v_settings.seller_city,'')='' or (coalesce(v_settings.seller_tax_number,'')='' and coalesce(v_settings.seller_vat_id,'')='') then raise exception 'Bitte Firmendaten, Anschrift und Steuernummer oder USt-IdNr. vervollständigen'; end if;
+  if coalesce(v_invoice.customer_name,'')='' or coalesce(v_invoice.customer_street,'')='' or coalesce(v_invoice.customer_postal_code,'')='' or coalesce(v_invoice.customer_city,'')='' then raise exception 'Bitte vollständige Kundenanschrift eintragen'; end if;
+  if v_invoice.service_date is null then raise exception 'Bitte das Leistungsdatum eintragen'; end if;
+  if v_invoice.output_format='pdf_xrechnung' and (coalesce(v_settings.seller_contact_name,'')='' or coalesce(v_settings.seller_email,'')='' or coalesce(v_settings.seller_phone,'')='' or coalesce(v_invoice.customer_email,'')='' or coalesce(v_invoice.buyer_reference,'')='') then raise exception 'Für XRechnung fehlen Pflichtangaben: Ansprechpartner und Kontaktdaten des Verkäufers, Kunden-E-Mail oder Käuferreferenz. Alternativ PDF als Ausgabeformat wählen.'; end if;
+  if not exists(select 1 from public.invoice_items where invoice_id=p_invoice_id) then raise exception 'Eine Rechnung benötigt mindestens eine Position'; end if;
+  select round(sum(round(quantity*unit_price,2)),2) into v_subtotal from public.invoice_items where invoice_id=p_invoice_id;
+  if coalesce(v_subtotal,0)<=0 then raise exception 'Rechnungsbetrag muss größer als 0 sein'; end if;
+  v_year:=extract(year from current_date)::integer;
+  insert into public.invoice_number_sequences(year,last_number) values(v_year,1) on conflict(year) do update set last_number=public.invoice_number_sequences.last_number+1 returning last_number into v_next;
+  update public.invoice_items set line_total=round(quantity*unit_price,2) where invoice_id=p_invoice_id;
+  update public.issued_invoices set invoice_number=coalesce(v_settings.invoice_prefix,'RE')||'-'||v_year||'-'||lpad(v_next::text,6,'0'),invoice_date=current_date,due_date=current_date+v_settings.payment_terms_days,subtotal=v_subtotal,tax_total=0,total=v_subtotal,issued_at=now(),status='issued',updated_at=now(),tax_mode='small_business',tax_note='Kein Ausweis von Umsatzsteuer, da Kleinunternehmer gemäß § 19 UStG.',seller_snapshot=jsonb_build_object('name',v_settings.seller_name,'contact_name',v_settings.seller_contact_name,'street',v_settings.seller_street,'postal_code',v_settings.seller_postal_code,'city',v_settings.seller_city,'country_code',v_settings.seller_country_code,'email',v_settings.seller_email,'phone',v_settings.seller_phone,'website',v_settings.seller_website,'tax_number',v_settings.seller_tax_number,'vat_id',v_settings.seller_vat_id,'bank_name',v_settings.seller_bank_name,'iban',v_settings.seller_iban,'bic',v_settings.seller_bic) where id=p_invoice_id returning * into v_invoice;
+  insert into public.invoice_events(invoice_id,event_type,description,metadata) values(p_invoice_id,'issued','Rechnung verbindlich ausgestellt',jsonb_build_object('invoice_number',v_invoice.invoice_number));
+  return v_invoice;
+end; $$;
+revoke all on function public.issue_invoice(uuid) from public,anon;
+grant execute on function public.issue_invoice(uuid) to authenticated;
