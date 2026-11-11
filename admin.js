@@ -1466,7 +1466,23 @@ function buildXRechnungXml(inv,items){
   const ref=isCredit&&inv.original_invoice_id?'<cac:BillingReference><cac:InvoiceDocumentReference><cbc:ID>'+xmlEscape(currentIssuedInvoices.find(x=>x.id===inv.original_invoice_id)?.invoice_number||'')+'</cbc:ID></cac:InvoiceDocumentReference></cac:BillingReference>':'';
   return '<?xml version="1.0" encoding="UTF-8"?>\n<'+root+' xmlns="urn:oasis:names:specification:ubl:schema:xsd:'+root+'-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"><cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0</cbc:CustomizationID><cbc:ProfileID>urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</cbc:ProfileID><cbc:ID>'+xmlEscape(inv.invoice_number)+'</cbc:ID><cbc:IssueDate>'+xmlEscape(inv.invoice_date)+'</cbc:IssueDate>'+type+(inv.due_date?'<cbc:DueDate>'+xmlEscape(inv.due_date)+'</cbc:DueDate>':'')+'<cbc:DocumentCurrencyCode>EUR</cbc:DocumentCurrencyCode>'+(inv.buyer_reference?'<cbc:BuyerReference>'+xmlEscape(inv.buyer_reference)+'</cbc:BuyerReference>':'')+ref+'<cac:AccountingSupplierParty>'+party(s.name,s.street,s.postal_code,s.city,s.country_code,s.email,sellerTax,{endpoint:s.email,identifier:inv.seller_identifier,contactName:s.contact_name,phone:s.phone,legalForm:'Kein Ausweis von Umsatzsteuer, da Kleinunternehmer gemäß § 19 UStG'})+'</cac:AccountingSupplierParty><cac:AccountingCustomerParty>'+party(buyerName,inv.customer_street,inv.customer_postal_code,inv.customer_city,inv.customer_country_code,inv.customer_email,inv.customer_vat_id?'<cac:PartyTaxScheme><cbc:CompanyID>'+xmlEscape(inv.customer_vat_id)+'</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>':'',{endpoint:inv.customer_email})+'</cac:AccountingCustomerParty>'+(inv.service_date?'<cac:Delivery><cbc:ActualDeliveryDate>'+xmlEscape(inv.service_date)+'</cbc:ActualDeliveryDate></cac:Delivery>':'')+(s.iban?'<cac:PaymentMeans><cbc:PaymentMeansCode>58</cbc:PaymentMeansCode><cac:PayeeFinancialAccount><cbc:ID>'+xmlEscape(s.iban)+'</cbc:ID>'+(s.bank_name?'<cbc:Name>'+xmlEscape(s.bank_name)+'</cbc:Name>':'')+'</cac:PayeeFinancialAccount></cac:PaymentMeans>':'')+'<cac:TaxTotal><cbc:TaxAmount currencyID="EUR">0.00</cbc:TaxAmount><cac:TaxSubtotal><cbc:TaxableAmount currencyID="EUR">'+sub+'</cbc:TaxableAmount><cbc:TaxAmount currencyID="EUR">0.00</cbc:TaxAmount><cac:TaxCategory><cbc:ID>E</cbc:ID><cbc:Percent>0</cbc:Percent><cbc:TaxExemptionReason>Kein Ausweis von Umsatzsteuer, da Kleinunternehmer gemäß § 19 UStG</cbc:TaxExemptionReason><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:TaxCategory></cac:TaxSubtotal></cac:TaxTotal><cac:LegalMonetaryTotal><cbc:LineExtensionAmount currencyID="EUR">'+sub+'</cbc:LineExtensionAmount><cbc:TaxExclusiveAmount currencyID="EUR">'+sub+'</cbc:TaxExclusiveAmount><cbc:TaxInclusiveAmount currencyID="EUR">'+total+'</cbc:TaxInclusiveAmount><cbc:PayableAmount currencyID="EUR">'+total+'</cbc:PayableAmount></cac:LegalMonetaryTotal>'+lineXml+'</'+root+'>';
 }
-function buildInvoicePdf(inv,items){
+async function loadInvoiceLogoDataUrl(){
+  try{
+    const response=await fetch(new URL('./logo-serviceleistungen.png',window.location.href).href,{cache:'force-cache'});
+    if(!response.ok)throw new Error('Logo konnte nicht geladen werden.');
+    const blob=await response.blob();
+    return await new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onload=()=>resolve(reader.result);
+      reader.onerror=()=>reject(new Error('Logo konnte nicht gelesen werden.'));
+      reader.readAsDataURL(blob);
+    });
+  }catch(error){
+    console.warn('Rechnungslogo konnte nicht geladen werden:',error);
+    return null;
+  }
+}
+async function buildInvoicePdf(inv,items){
   if(!window.jspdf?.jsPDF)throw new Error('PDF-Bibliothek konnte nicht geladen werden. Bitte Seite neu laden.');
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({unit:'mm',format:'a4'});
@@ -1482,64 +1498,110 @@ function buildInvoicePdf(inv,items){
   const sellerPhone=safe(s.phone||s.seller_phone);
   const taxNumber=safe(s.tax_number||s.seller_tax_number);
   const iban=safe(s.iban||s.seller_iban);
-  const bank=safe(s.bank_name||s.seller_bank_name);
   const bic=safe(s.bic||s.seller_bic);
   const recipient=safe(inv.customer_company||inv.customer_name);
   const recipientLine=[inv.customer_postal_code,inv.customer_city].filter(Boolean).join(' ');
   const dueText=inv.due_date?fmtDate(inv.due_date):'';
   const title=inv.document_type==='cancellation'?'STORNORECHNUNG':'RECHNUNG';
-  let page=1,y=20;
+  let y=20;
+  const logoData=await loadInvoiceLogoDataUrl();
+  const addWrapped=(text,x,baseline,width,lineHeight=4.2)=>{
+    const lines=doc.splitTextToSize(safe(text)||'—',width);
+    doc.text(lines,x,baseline);
+    return lines.length*lineHeight;
+  };
   const addFooter=()=>{
     const totalPages=doc.getNumberOfPages();
     for(let p=1;p<=totalPages;p++){
       doc.setPage(p);
       doc.setDrawColor(205,195,174);doc.setLineWidth(.25);doc.line(left,270,right,270);
-      doc.setFont('helvetica','bold');doc.setFontSize(7.5);doc.setTextColor(65,65,65);
+      doc.setFont('helvetica','bold');doc.setFontSize(7);doc.setTextColor(65,65,65);
       doc.text('T.S. Serviceleistungen',left,276);
-      doc.setFont('helvetica','normal');doc.text(sellerStreet,left,281);doc.text(sellerPlace,left,286);doc.text('Deutschland',left,291);
-      doc.setFont('helvetica','bold');doc.text('KONTAKT',82,276);
-      doc.setFont('helvetica','normal');doc.text('TEL. '+sellerPhone,82,281);doc.text('E-MAIL '+sellerEmail,82,286);doc.text('STEUER-NR. '+taxNumber,82,291);
-      doc.setFont('helvetica','bold');doc.text('BANK',151,276);
-      doc.setFont('helvetica','normal');doc.text('IBAN '+iban,151,281);doc.text('BIC '+bic,151,286);doc.text('Inhaber Thomas Schwetz',151,291);
+      doc.setFont('helvetica','normal');doc.setFontSize(6.2);
+      doc.text(doc.splitTextToSize(sellerStreet,54),left,281);
+      doc.text(doc.splitTextToSize(sellerPlace,54),left,286);
+      doc.text('Deutschland',left,291);
+      doc.setFont('helvetica','bold');doc.setFontSize(7);doc.text('KONTAKT',82,276);
+      doc.setFont('helvetica','normal');doc.setFontSize(6.2);
+      doc.text(doc.splitTextToSize('TEL. '+sellerPhone,62),82,281);
+      doc.text(doc.splitTextToSize('E-MAIL '+sellerEmail,62),82,286);
+      doc.text(doc.splitTextToSize('STEUER-NR. '+taxNumber,62),82,291);
+      doc.setFont('helvetica','bold');doc.setFontSize(7);doc.text('BANK',151,276);
+      doc.setFont('helvetica','normal');doc.setFontSize(6.0);
+      doc.text(doc.splitTextToSize('IBAN '+iban,39),151,281);
+      doc.text(doc.splitTextToSize('BIC '+bic,39),151,286);
+      doc.text('Inhaber Thomas Schwetz',151,291);
       doc.setFontSize(7);doc.text(p+'/'+totalPages,right,294,{align:'right'});
     }
   };
   const newPage=()=>{
-    doc.addPage();page++;y=22;
+    doc.addPage();y=22;
     doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(30,30,30);
     doc.text(sellerName+' – '+title+' – Fortsetzung',left,y);y+=12;
   };
   const ensureSpace=height=>{if(y+height>263)newPage();};
   doc.setTextColor(35,35,35);doc.setFont('helvetica','normal');doc.setFontSize(8);
-  doc.text(sellerName,left,18);doc.text(sellerStreet,left,23);doc.text(sellerPlace,left,28);
-  doc.setFont('helvetica','bold');doc.setFontSize(8);
+  if(logoData){
+    try{
+      const props=doc.getImageProperties(logoData);
+      const scale=Math.min(39/props.width,25/props.height);
+      doc.addImage(logoData,'PNG',left,10,props.width*scale,props.height*scale,undefined,'FAST');
+    }catch(error){console.warn('Rechnungslogo konnte nicht in die PDF eingefügt werden:',error);}
+  }
+  const senderX=logoData?65:left;
+  doc.setFont('helvetica','bold');doc.setFontSize(8.5);doc.text(sellerName,senderX,15);
+  doc.setFont('helvetica','normal');doc.setFontSize(7.5);
+  doc.text(sellerStreet,senderX,21);doc.text(sellerPlace,senderX,26);
+  doc.text('Deutschland',senderX,31);
+
+  // Zweispaltiger Metadatenblock mit echtem Zeilenumbruch statt überlagerter Werte.
   const meta=[
     ['RECHNUNGS-NR.',safe(inv.invoice_number||'ENTWURF')],
     ['RECHNUNGSDATUM',fmtDate(inv.invoice_date)],
     ['LIEFERDATUM',fmtDate(inv.service_date)],
-    ['IHRE KUNDENNUMMER',safe(inv.customer_number||'')],
+    ['IHRE KUNDENNUMMER',safe(inv.customer_number||'—')],
     ['IHR ANSPRECHPARTNER',safe(s.contact_name||'Thomas Schwetz')]
   ];
-  let my=18;meta.forEach(([label,value])=>{doc.setFont('helvetica','bold');doc.text(label,125,my);doc.setFont('helvetica','normal');doc.text(value||'—',190,my,{align:'right'});my+=5;});
+  let metaY=14;
+  meta.forEach(([label,value])=>{
+    doc.setFont('helvetica','bold');doc.setFontSize(6.6);
+    const labelLines=doc.splitTextToSize(label,30);
+    doc.text(labelLines,118,metaY);
+    doc.setFont('helvetica','normal');doc.setFontSize(6.8);
+    const valueLines=doc.splitTextToSize(value||'—',39);
+    doc.text(valueLines,151,metaY);
+    metaY+=Math.max(labelLines.length,valueLines.length)*3.3+1.5;
+  });
+
+  // Empfängeradresse wird ebenfalls umgebrochen; der folgende Inhalt rückt bei Bedarf nach unten.
   doc.setFontSize(9);doc.setFont('helvetica','normal');
-  doc.text(recipient,left,52);if(inv.customer_name&&inv.customer_company)doc.text(safe(inv.customer_name),left,57);
-  doc.text(safe(inv.customer_street),left,inv.customer_name&&inv.customer_company?62:57);
-  doc.text(recipientLine,left,inv.customer_name&&inv.customer_company?67:62);
-  doc.text('Deutschland',left,inv.customer_name&&inv.customer_company?72:67);
-  doc.setFont('helvetica','bold');doc.text('Rechnungs Nr. '+safe(inv.invoice_number||'ENTWURF'),left,88);
-  doc.setFont('helvetica','normal');doc.text(fmtDate(inv.invoice_date),right,88,{align:'right'});
-  y=104;doc.text('Sehr geehrte Damen und Herren,',left,y);y+=9;
-  doc.text('vielen Dank für Ihren Auftrag und das damit verbundene Vertrauen!',left,y);y+=6;
-  doc.text('Hiermit stelle ich Ihnen die folgenden Leistungen in Rechnung:',left,y);y+=12;
-  doc.setFont('helvetica','bold');doc.setFontSize(8.5);
+  let addressY=Math.max(52,metaY+5);
+  addressY+=addWrapped(recipient,left,addressY,100,4.5);
+  if(inv.customer_name&&inv.customer_company)addressY+=addWrapped(inv.customer_name,left,addressY,100,4.5);
+  addressY+=addWrapped(inv.customer_street,left,addressY,100,4.5);
+  addressY+=addWrapped(recipientLine,left,addressY,100,4.5);
+  addressY+=addWrapped('Deutschland',left,addressY,100,4.5);
+  const headingY=Math.max(86,addressY+7);
+  doc.setFont('helvetica','bold');doc.setFontSize(9);
+  doc.text(title,left,headingY);
+  doc.setFont('helvetica','normal');doc.setFontSize(8);
+  doc.text(fmtDate(inv.invoice_date),right,headingY,{align:'right'});
+  y=headingY+15;
+  doc.setFontSize(8.5);
+  y+=addWrapped('Sehr geehrte Damen und Herren,',left,y,170,4.8)+4;
+  y+=addWrapped('vielen Dank für Ihren Auftrag und das damit verbundene Vertrauen!',left,y,170,4.8)+1;
+  y+=addWrapped('Hiermit stelle ich Ihnen die folgenden Leistungen in Rechnung:',left,y,170,4.8)+8;
+
+  doc.setFont('helvetica','bold');doc.setFontSize(8);
   doc.text('Beschreibung',left,y);doc.text('Menge',124,y,{align:'right'});doc.text('Einzelpreis',157,y,{align:'right'});doc.text('Gesamtpreis',right,y,{align:'right'});
-  doc.setDrawColor(150,140,120);doc.line(left,y+2,right,y+2);y+=9;doc.setFont('helvetica','normal');doc.setFontSize(8.5);
+  doc.setDrawColor(150,140,120);doc.line(left,y+2,right,y+2);y+=9;
+  doc.setFont('helvetica','normal');doc.setFontSize(8.2);
   (items||[]).forEach((it,index)=>{
-    const desc=doc.splitTextToSize(String(it.description||''),92);
+    const desc=doc.splitTextToSize(String(it.description||''),91);
     const qty=String(it.quantity??1);
     const unit=money(it.unit_price);
     const total=money(it.line_total??Number(it.quantity||1)*Number(it.unit_price||0));
-    const lineHeight=Math.max(5,desc.length*4.6)+2;
+    const lineHeight=Math.max(5,desc.length*4.4)+2;
     ensureSpace(lineHeight+3);
     doc.text((index+1)+'.',left,y);
     doc.text(desc,left+7,y);
@@ -1549,11 +1611,11 @@ function buildInvoicePdf(inv,items){
   y+=5;ensureSpace(45);doc.setDrawColor(150,140,120);doc.line(120,y,right,y);y+=8;
   doc.setFont('helvetica','bold');doc.setFontSize(9);
   doc.text('Gesamtbetrag netto',120,y);doc.text(money(inv.subtotal??inv.total),right,y,{align:'right'});y+=7;
-  doc.setFont('helvetica','normal');doc.setFontSize(8.5);
+  doc.setFont('helvetica','normal');doc.setFontSize(8.2);
   doc.text('Umsatzsteuer nicht erhoben gemäß §19 UStG.',left,y);y+=8;
   doc.setFont('helvetica','bold');doc.setFontSize(10);
   doc.text('Gesamtbetrag brutto',120,y);doc.text(money(inv.total),right,y,{align:'right'});y+=13;
-  doc.setFont('helvetica','normal');doc.setFontSize(8.5);
+  doc.setFont('helvetica','normal');doc.setFontSize(8.2);
   const paymentDays=Number(currentInvoiceSettings?.payment_terms_days||7);
   const paymentLines=[
     'Zahlungsbedingungen: Zahlung innerhalb von '+paymentDays+' Tagen ab Rechnungseingang ohne Abzüge.',
@@ -1561,17 +1623,18 @@ function buildInvoicePdf(inv,items){
     dueText?'Der Rechnungsbetrag ist bis zum '+dueText+' fällig.':''
   ].filter(Boolean);
   paymentLines.forEach(line=>{
-    const wrapped=doc.splitTextToSize(line,170);ensureSpace(wrapped.length*5+3);doc.text(wrapped,left,y);y+=wrapped.length*5+2;
+    const wrapped=doc.splitTextToSize(line,170);ensureSpace(wrapped.length*4.8+3);doc.text(wrapped,left,y);y+=wrapped.length*4.8+2;
   });
-  if(inv.notes){y+=3;ensureSpace(18);doc.setFont('helvetica','bold');doc.text('Hinweise:',left,y);y+=5;doc.setFont('helvetica','normal');const notes=doc.splitTextToSize(String(inv.notes),170);doc.text(notes,left,y);y+=notes.length*5+4;}
+  if(inv.notes){y+=3;ensureSpace(18);doc.setFont('helvetica','bold');doc.text('Hinweise:',left,y);y+=5;doc.setFont('helvetica','normal');const notes=doc.splitTextToSize(String(inv.notes),170);ensureSpace(notes.length*4.8);doc.text(notes,left,y);y+=notes.length*4.8+4;}
   ensureSpace(22);y+=8;doc.text('Mit freundlichen Grüßen',left,y);y+=12;doc.setFont('helvetica','bold');doc.text('Thomas Schwetz',left,y);
   addFooter();
   return doc.output('blob');
 }
+
 async function createInvoiceFiles(inv){
   const {data:items,error:itemError}=await db.from('invoice_items').select('*').eq('invoice_id',inv.id).order('position');
   if(itemError)throw itemError;
-  const pdfBlob=buildInvoicePdf(inv,items||[]);
+  const pdfBlob=await buildInvoicePdf(inv,items||[]);
   const base=(inv.invoice_number||inv.id).replace(/[^A-Za-z0-9_-]/g,'_');
   const docs=[{kind:'pdf',file:new File([pdfBlob],base+'.pdf',{type:'application/pdf'}),mime:'application/pdf'}];
   if(inv.output_format==='pdf_xrechnung'){
@@ -1623,7 +1686,7 @@ async function openInvoicePreview(inv){
       },
       tax_note:'Umsatzsteuer nicht erhoben gemäß § 19 UStG.'
     };
-    const blob=buildInvoicePdf(previewInvoice,items);
+    const blob=await buildInvoicePdf(previewInvoice,items);
     if(currentInvoicePreviewUrl)URL.revokeObjectURL(currentInvoicePreviewUrl);
     currentInvoicePreviewUrl=URL.createObjectURL(blob);
     currentInvoicePreviewId=inv.id;
