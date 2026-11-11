@@ -1735,22 +1735,11 @@ async function deleteInvoiceDraft(id){
   if(!inv||inv.status!=='draft')return;
   if(!confirm('Diesen Rechnungsentwurf endgültig löschen?'))return;
 
-  // Positionen zuerst löschen, solange der übergeordnete Entwurf noch existiert.
-  // Beim direkten Löschen des Rechnungskopfs würde ON DELETE CASCADE die
-  // Positions-Trigger erst nach Entfernung des Elternsatzes auslösen. Der
-  // Schutz-Trigger kann dann den Status nicht mehr als "draft" erkennen.
   try{
-    const {error:itemsError}=await db.from('invoice_items').delete().eq('invoice_id',id);
-    if(itemsError)throw itemsError;
-
-    const {data:deleted,error}=await db.from('issued_invoices')
-      .delete()
-      .eq('id',id)
-      .eq('status','draft')
-      .select('id')
-      .maybeSingle();
+    // Zentraler Datenbankvorgang: prüft den Status und entfernt alle
+    // zugehörigen Entwurfsdaten in einer Transaktion.
+    const {error}=await db.rpc('delete_invoice_draft',{p_invoice_id:id});
     if(error)throw error;
-    if(!deleted)throw new Error('Der Entwurf wurde nicht gelöscht. Bitte aktualisieren und erneut versuchen.');
 
     await loadIssuedInvoices();
     alert('Rechnungsentwurf wurde gelöscht.');
