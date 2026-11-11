@@ -1,4 +1,4 @@
-const CACHE = 'ts-serviceleistungen-pwa-v20261111-invoice-spacing-8';
+const CACHE = 'ts-serviceleistungen-pwa-v20261111-invoice-signoff-9';
 const SHELL = [
   './',
   './index.html',
