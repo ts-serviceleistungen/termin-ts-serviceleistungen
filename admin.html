@@ -166,7 +166,64 @@
     </section>
   </section>
 
-  <section id="invoicesView" class="hidden"><div class="section-toolbar"><button type="button" class="back-dashboard" data-back-dashboard>← Dashboard</button></div><section class="panel"><div class="section-title"><div><span class="eyebrow">FINANZEN</span><h2>Rechnungen</h2><p>Rechnungen und Zahlungseingänge</p></div></div><div class="finance-cards"><div><small>Gesamt 2026</small><b id="invoiceTotal">0,00 €</b></div><div><small>Aktueller Monat</small><b id="invoiceMonthTotal">0,00 €</b></div></div><input id="invoiceSearch" class="search" placeholder="Kunde, Rechnungsnummer oder Beschreibung suchen…"><div id="invoiceList"></div></section></section>
+  <section id="invoicesView" class="hidden">
+    <div class="section-toolbar"><button type="button" class="back-dashboard" data-back-dashboard>← Dashboard</button></div>
+    <section class="panel invoice-app-panel">
+      <div class="section-title"><div><span class="eyebrow">NEUE RECHNUNGSVERWALTUNG</span><h2>Eigene Rechnungen</h2><p>Entwürfe, ausgestellte Rechnungen, Downloads, Stornierungen und Zahlungen</p></div><button type="button" id="invoiceNewBtn" class="gold-btn">＋ Neue Rechnung</button></div>
+      <div class="finance-cards">
+        <div><small>Ausgestellt</small><b id="issuedInvoiceCount">0</b></div>
+        <div><small>Offener Betrag</small><b id="issuedInvoiceOpen">0,00 €</b></div>
+        <div><small>Bezahlt</small><b id="issuedInvoicePaid">0,00 €</b></div>
+      </div>
+      <details class="invoice-settings">
+        <summary>Rechnungseinstellungen / Firmendaten</summary>
+        <form id="invoiceSettingsForm" class="field-grid">
+          <label>Firmenname / vollständiger Name<input id="invSellerName" required></label>
+          <label>Straße und Hausnummer<input id="invSellerStreet" required></label>
+          <label>PLZ<input id="invSellerZip" required></label>
+          <label>Ort<input id="invSellerCity" required></label>
+          <label>E-Mail<input id="invSellerEmail" type="email"></label>
+          <label>Telefon<input id="invSellerPhone"></label>
+          <label>Website<input id="invSellerWebsite"></label>
+          <label>Steuernummer<input id="invSellerTaxNumber" placeholder="Erforderlich, wenn keine USt-IdNr. vorhanden"></label>
+          <label>USt-IdNr. (optional)<input id="invSellerVatId"></label>
+          <label>Bank<input id="invSellerBank"></label>
+          <label>IBAN<input id="invSellerIban"></label>
+          <label>BIC<input id="invSellerBic"></label>
+          <label>Zahlungsziel (Tage)<input id="invPaymentDays" type="number" min="0" max="365" value="14"></label>
+          <label>Rechnungspräfix<input id="invPrefix" value="RE"></label>
+          <label>Stornopräfix<input id="invCancelPrefix" value="ST"></label>
+          <div class="invoice-tax-note">Steuerkonfiguration: Kleinunternehmer gemäß § 19 UStG. Es wird keine Umsatzsteuer ausgewiesen. Bitte prüfe die hinterlegten Firmendaten vor der ersten Ausstellung.</div>
+          <div class="form-actions"><button type="submit" class="gold-btn">Einstellungen speichern</button><span id="invoiceSettingsMsg" class="form-message"></span></div>
+        </form>
+      </details>
+      <form id="invoiceDraftForm" class="invoice-draft-form hidden">
+        <div class="section-title"><div><span class="eyebrow">RECHNUNGSENTWURF</span><h3>Neue Rechnung</h3></div></div>
+        <div class="field-grid">
+          <label>Aus Auftrag übernehmen (optional)<select id="invoiceSourceOrder"><option value="">Kein Auftrag</option></select></label>
+          <label>Aus Angebot übernehmen (optional)<select id="invoiceSourceOffer"><option value="">Kein Angebot</option></select></label>
+          <label>Kunde / Rechnungsempfänger<input id="invoiceCustomerName" required></label>
+          <label>Firma (optional)<input id="invoiceCustomerCompany"></label>
+          <label>Straße und Hausnummer<input id="invoiceCustomerStreet" required></label>
+          <label>PLZ<input id="invoiceCustomerZip" required></label>
+          <label>Ort<input id="invoiceCustomerCity" required></label>
+          <label>E-Mail<input id="invoiceCustomerEmail" type="email"></label>
+          <label>Leistungsdatum<input id="invoiceServiceDate" type="date" required></label>
+        </div>
+        <div class="invoice-items-head"><b>Rechnungspositionen</b><button type="button" id="invoiceAddItemBtn" class="secondary-btn">＋ Position hinzufügen</button></div>
+        <div id="invoiceDraftItems" class="invoice-draft-items"></div>
+        <label>Zusätzliche Hinweise<textarea id="invoiceDraftNotes" rows="2" placeholder="Optional"></textarea></label>
+        <div class="form-actions"><button type="submit" class="gold-btn">Entwurf speichern</button><button type="button" id="invoiceDraftCancelBtn" class="secondary-btn">Abbrechen</button><span id="invoiceDraftMsg" class="form-message"></span></div>
+      </form>
+      <input id="issuedInvoiceSearch" class="search" placeholder="Neue Rechnungen suchen…">
+      <div id="issuedInvoiceList"><p>Rechnungen werden geladen…</p></div>
+    </section>
+    <section class="panel legacy-invoices-panel">
+      <div class="section-title"><div><span class="eyebrow">BESTANDSDATEN</span><h2>Bisherige Rechnungen</h2><p>Übersicht aus dem bisherigen Rechnungsprogramm – vorerst unverändert</p></div></div>
+      <div class="finance-cards"><div><small>Gesamt laut bisherigem Programm</small><b id="invoiceTotal">0,00 €</b></div><div><small>Aktueller Monat</small><b id="invoiceMonthTotal">0,00 €</b></div></div>
+      <input id="invoiceSearch" class="search" placeholder="Kunde, Rechnungsnummer oder Beschreibung suchen…"><div id="invoiceList"></div>
+    </section>
+  </section>
 
   <section id="offersView" class="hidden">
     <div class="section-toolbar"><button type="button" class="back-dashboard" data-back-dashboard>← Dashboard</button></div>
@@ -231,5 +288,6 @@
   <section id="receiptsView" class="hidden"><div class="section-toolbar"><button type="button" class="back-dashboard" data-back-dashboard>← Dashboard</button></div><section class="panel"><div class="section-title"><div><span class="eyebrow">AUSGABEN</span><h2>Belege</h2><p>Belege erfassen und Ausgaben verwalten</p></div></div><form id="receiptForm" class="receipt-form"><label>Belegfoto<input id="receiptImage" type="file" accept="image/*" capture="environment" required></label><button type="button" id="ocrReceipt" class="gold-btn">🔎 Beleg automatisch erkennen</button><p id="ocrMsg" class="notice hidden"></p><div class="field-grid"><label>Datum<input id="receiptDate" type="date" required></label><label>Händler / Geschäft<input id="receiptMerchant" type="text"></label><label>Belegnummer<input id="receiptNumber" type="text"></label><label>Bruttobetrag (€)<input id="receiptGross" type="number" min="0" step="0.01" required></label><label>Kategorie<select id="receiptCategory"><option>KFZ</option><option>Kraftstoff</option><option>Ersatzteile</option><option>Betriebsmittel</option><option>Büro</option><option>Sonstiges</option></select></label><label>Zahlungsart<select id="receiptPayment"><option>Bar</option><option>EC/Karte</option><option>Überweisung</option><option>Sonstiges</option></select></label></div><label>Beschreibung<input id="receiptDescription" type="text"></label><p id="receiptMsg" class="notice hidden"></p><button id="saveReceiptBtn" class="gold-btn" type="submit">Beleg speichern</button></form></section><section class="panel"><div class="panel-head"><b>Alle Belege</b></div><div id="receiptList"></div></section></section>
 </div></div></section></main>
 <div id="detailModal" class="modal hidden"><div class="modal-card"><div class="modal-head"><div><span class="eyebrow">ANFRAGE</span><h2 id="detailTitle">Details</h2></div><button id="closeModal" class="close">×</button></div><div id="detailBody"></div><div id="detailActions" class="modal-actions"></div></div></div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script><script src="config.js"></script><script src="admin.js?v=20261111-order-delete-1"></script><script src="./pwa.js?v=20261005-3"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script><script src="config.js"></script><script src="admin.js?v=20261111-order-delete-1"></script><script src="./pwa.js?v=20261005-3"></script>
 </body></html>
