@@ -49,7 +49,7 @@ self.addEventListener('fetch', event => {
 
   // Always fetch live admin code/config so deployed fixes cannot be hidden
   // behind an older cached dashboard bundle.
-  const isAdminAsset = /\\/(admin\\.html|admin\\.js|config\\.js)$/.test(url.pathname);
+  const isAdminAsset = /\/(admin\.html|admin\.js|config\.js)$/.test(url.pathname);
   if (isAdminAsset) {
     event.respondWith(
       fetch(request, { cache: 'no-store' }).then(response => {
