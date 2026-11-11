@@ -85,6 +85,18 @@ const issuedInvoiceSearch = document.getElementById('issuedInvoiceSearch');
 const issuedInvoiceCount = document.getElementById('issuedInvoiceCount');
 const issuedInvoiceOpen = document.getElementById('issuedInvoiceOpen');
 const issuedInvoicePaid = document.getElementById('issuedInvoicePaid');
+const invoicePaymentModal=document.getElementById('invoicePaymentModal');
+const invoicePaymentForm=document.getElementById('invoicePaymentForm');
+const invoicePaymentInfo=document.getElementById('invoicePaymentInfo');
+const invoicePaymentAmount=document.getElementById('invoicePaymentAmount');
+const invoicePaymentDate=document.getElementById('invoicePaymentDate');
+const invoicePaymentMethod=document.getElementById('invoicePaymentMethod');
+const invoicePaymentReference=document.getElementById('invoicePaymentReference');
+const invoicePaymentNotes=document.getElementById('invoicePaymentNotes');
+const invoicePaymentMessage=document.getElementById('invoicePaymentMessage');
+const invoicePaymentClose=document.getElementById('invoicePaymentClose');
+const invoicePaymentCancel=document.getElementById('invoicePaymentCancel');
+let currentPaymentInvoiceId=null;
 const invoicePreviewModal = document.getElementById('invoicePreviewModal');
 const invoicePreviewFrame = document.getElementById('invoicePreviewFrame');
 const invoicePreviewMeta = document.getElementById('invoicePreviewMeta');
@@ -1659,18 +1671,38 @@ async function cancelInvoice(id){
     alert('Stornorechnung '+cancelled.invoice_number+' wurde erstellt und archiviert.');
   }catch(error){alert('Stornierung nicht möglich: '+error.message);await loadIssuedInvoices();}
 }
-async function addInvoicePayment(id){
-  const inv=currentIssuedInvoices.find(x=>x.id===id);if(!inv)return;
-  const amountRaw=prompt('Zahlungseingang in Euro. Noch offen: '+euro(Math.max(0,Number(inv.total||0)-Number(inv.amount_paid||0))));if(amountRaw===null)return;
-  const amount=Number(amountRaw.replace(',','.'));
-  if(!Number.isFinite(amount)||amount<=0){alert('Bitte einen gültigen positiven Betrag eingeben.');return;}
-  const paymentDate=prompt('Zahlungsdatum (JJJJ-MM-TT)',new Date().toLocaleDateString('sv-SE'));if(!paymentDate)return;
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate)){alert('Bitte das Datum im Format JJJJ-MM-TT eingeben.');return;}
-  const methodRaw=prompt('Zahlungsart: Überweisung, Bar, Karte oder Sonstiges','Überweisung')||'Überweisung';
-  const map={'Überweisung':'bank_transfer','Bar':'cash','Karte':'card','Sonstiges':'other'};
-  const {error}=await db.from('invoice_payments').insert({invoice_id:id,amount,payment_method:map[methodRaw]||'other',payment_date:paymentDate});
-  if(error){alert('Zahlung konnte nicht gespeichert werden: '+error.message);return;}
+function addInvoicePayment(id){
+  const inv=currentIssuedInvoices.find(x=>x.id===id);if(!inv||inv.status!=='issued')return;
+  const remaining=Math.max(0,Number(inv.total||0)-Number(inv.amount_paid||0));
+  if(remaining<=0){alert('Diese Rechnung ist bereits vollständig bezahlt.');return;}
+  currentPaymentInvoiceId=id;
+  invoicePaymentInfo.textContent=(inv.invoice_number||'Rechnung')+' · noch offen: '+euro(remaining);
+  invoicePaymentAmount.value=remaining.toFixed(2);
+  invoicePaymentAmount.max=remaining.toFixed(2);
+  invoicePaymentDate.value=new Date().toLocaleDateString('sv-SE');
+  invoicePaymentMethod.value='bank_transfer';
+  invoicePaymentReference.value=inv.invoice_number||'';
+  invoicePaymentNotes.value='';
+  invoicePaymentMessage.classList.add('hidden');
+  invoicePaymentModal.classList.remove('hidden');
+}
+function closeInvoicePayment(){
+  invoicePaymentModal?.classList.add('hidden');
+  currentPaymentInvoiceId=null;
+}
+async function saveInvoicePayment(event){
+  event.preventDefault();
+  const inv=currentIssuedInvoices.find(x=>x.id===currentPaymentInvoiceId);if(!inv)return;
+  const amount=Math.round(Number(invoicePaymentAmount.value)*100)/100;
+  const remaining=Math.max(0,Math.round((Number(inv.total||0)-Number(inv.amount_paid||0))*100)/100);
+  if(!Number.isFinite(amount)||amount<=0||amount>remaining){invoicePaymentMessage.textContent='Bitte einen Betrag größer 0 und höchstens '+euro(remaining)+' eingeben.';invoicePaymentMessage.classList.remove('hidden');return;}
+  if(!invoicePaymentDate.value){invoicePaymentMessage.textContent='Bitte das Zahlungsdatum angeben.';invoicePaymentMessage.classList.remove('hidden');return;}
+  const payload={invoice_id:inv.id,amount,payment_method:invoicePaymentMethod.value,payment_date:invoicePaymentDate.value,reference:invoicePaymentReference.value.trim()||null,notes:invoicePaymentNotes.value.trim()||null};
+  const {error}=await db.from('invoice_payments').insert(payload);
+  if(error){invoicePaymentMessage.textContent='Zahlung konnte nicht gespeichert werden: '+error.message;invoicePaymentMessage.classList.remove('hidden');return;}
+  closeInvoicePayment();
   await loadIssuedInvoices();
+  alert('Zahlungseingang wurde gespeichert.');
 }
 async function downloadInvoiceDocument(id,kind){
   const {data:doc,error}=await db.from('invoice_documents').select('*').eq('invoice_id',id).eq('document_kind',kind).maybeSingle();
@@ -2566,6 +2598,10 @@ ordersView?.addEventListener('change',e=>{
 ordersView?.addEventListener('click',async e=>{const invoice=e.target.closest('[data-order-invoice]');if(invoice){showView('invoices');await ensureInvoiceSources();return openInvoiceDraftFromOrder(invoice.dataset.orderInvoice);}const del=e.target.closest('[data-order-delete]');if(del)return deleteOrder(del);const button=e.target.closest('[data-order-save]');if(button)saveOrderDetails(button)});
 
 invoiceSettingsForm?.addEventListener('submit',saveInvoiceSettings);
+invoicePaymentForm?.addEventListener('submit',saveInvoicePayment);
+invoicePaymentClose?.addEventListener('click',closeInvoicePayment);
+invoicePaymentCancel?.addEventListener('click',closeInvoicePayment);
+invoicePaymentModal?.addEventListener('click',e=>{if(e.target===invoicePaymentModal)closeInvoicePayment();});
 invoiceDraftForm?.addEventListener('submit',createInvoiceDraft);
 invoicePreviewBtn?.addEventListener('click',()=>createInvoiceDraft(null,{preview:true}));
 invoiceNewBtn?.addEventListener('click',async()=>{resetInvoiceDraft();invoiceDraftForm.classList.remove('hidden');invoiceSetField('invoiceServiceDate',new Date().toLocaleDateString('sv-SE'));await ensureInvoiceSources();invoiceDraftForm.scrollIntoView({behavior:'smooth',block:'start'});});
