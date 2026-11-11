@@ -193,11 +193,11 @@
           <label>Zahlungsziel (Tage)<input id="invPaymentDays" type="number" min="0" max="365" value="14"></label>
           <label>Rechnungspräfix<input id="invPrefix" value="RE"></label>
           <label>Stornopräfix<input id="invCancelPrefix" value="ST"></label>
-          <div class="invoice-tax-note">Steuerkonfiguration: Kleinunternehmer gemäß § 19 UStG. Es wird keine Umsatzsteuer ausgewiesen. Bitte prüfe die hinterlegten Firmendaten vor der ersten Ausstellung.</div>
+          <div class="invoice-tax-note">Steuerkonfiguration: Kleinunternehmer gemäß § 19 UStG. Es wird keine Umsatzsteuer ausgewiesen. Bitte prüfe die hinterlegten Firmendaten vor der ersten Ausstellung. Die erzeugte XRechnung-Datei sollte vor produktivem Versand zusätzlich mit dem offiziellen KoSIT-Validator geprüft werden.</div>
           <div class="form-actions"><button type="submit" class="gold-btn">Einstellungen speichern</button><span id="invoiceSettingsMsg" class="form-message"></span></div>
         </form>
       </details>
-      <form id="invoiceDraftForm" class="invoice-draft-form hidden">
+      <form id="invoiceDraftForm" class="invoice-draft-form hidden"><input id="invoiceDraftId" type="hidden">
         <div class="section-title"><div><span class="eyebrow">RECHNUNGSENTWURF</span><h3>Neue Rechnung</h3></div></div>
         <div class="field-grid">
           <label>Aus Auftrag übernehmen (optional)<select id="invoiceSourceOrder"><option value="">Kein Auftrag</option></select></label>
@@ -208,6 +208,8 @@
           <label>PLZ<input id="invoiceCustomerZip" required></label>
           <label>Ort<input id="invoiceCustomerCity" required></label>
           <label>E-Mail<input id="invoiceCustomerEmail" type="email"></label>
+          <label>USt-IdNr. Kunde (optional)<input id="invoiceCustomerVatId"></label>
+          <label>Leitweg-ID / Käuferreferenz (optional)<input id="invoiceBuyerReference"></label>
           <label>Leistungsdatum<input id="invoiceServiceDate" type="date" required></label>
         </div>
         <div class="invoice-items-head"><b>Rechnungspositionen</b><button type="button" id="invoiceAddItemBtn" class="secondary-btn">＋ Position hinzufügen</button></div>
