@@ -1,4 +1,4 @@
--- Fahrzeugpflege: genaue Abgabezeit, Fahrzeugklasse, Aufwandszuschläge und 30-Minuten-Puffer
+-- Fahrzeugpflege: genaue Abgabezeit, Fahrzeugklasse, Aufwandszuschläge, Werktage und 30-Minuten-Puffer
 alter table public.requests add column if not exists vehicle_class text;
 
 CREATE OR REPLACE FUNCTION public.calculate_vehicle_care_duration(p_vehicle_type text, p_care_options text[], p_dirt_level text, p_pet_hair text)
@@ -79,10 +79,12 @@ declare
   v_duration record;
   v_day date;
   v_remaining numeric;
+  v_segment_hours numeric;
   v_start timestamptz;
   v_end timestamptz;
   v_requested_time time;
   v_marker text;
+  v_first_day boolean := true;
 begin
   delete from public.request_booking_blocks where request_id = p_request_id;
 
@@ -107,45 +109,67 @@ begin
     if v_requested_time < time '08:00' or v_requested_time > time '16:00' then
       raise exception 'Die Abgabezeit muss zwischen 08:00 und 16:00 Uhr liegen.';
     end if;
+    if extract(isodow from v_request.requested_date) in (6,7) then
+      raise exception 'Fahrzeugpflege-Termine können nur von Montag bis Freitag angefragt werden.';
+    end if;
 
     update public.requests
     set duration_hours = v_duration.duration_hours,
         duration_label = v_duration.duration_label
     where id = p_request_id;
 
-    v_start := (v_request.requested_date + v_requested_time) at time zone 'Europe/Berlin';
-    v_end := v_start + (v_duration.duration_hours::double precision * interval '1 hour');
+    v_day := v_request.requested_date;
+    v_remaining := v_duration.duration_hours;
     v_marker := 'Kundentermin – ' ||
       coalesce(nullif(trim(concat_ws(' ', v_request.first_name, v_request.last_name)), ''), 'Kunde') ||
       ' – ' || coalesce(v_request.service_type, 'Leistung');
 
-    if exists (
-      select 1 from public.request_booking_blocks b
-      where b.request_id <> p_request_id
-        and b.booking_start < v_end + interval '30 minutes'
-        and b.booking_end > v_start - interval '30 minutes'
-    ) then
-      raise exception 'Der gewünschte Start kollidiert mit einem anderen Auftrag. Bitte einen anderen Startzeitpunkt wählen.';
-    end if;
-    if exists (
-      select 1 from public.personal_calendar_events e
-      where e.blocks_customer_bookings = true
-        and e.title is distinct from v_marker
-        and e.start_time < v_end + interval '30 minutes'
-        and e.end_time > v_start - interval '30 minutes'
-    ) then
-      raise exception 'Der gewünschte Start kollidiert mit einer Schicht oder einem persönlichen Kalendereintrag.';
-    end if;
-    if exists (
-      select 1 from public.calendar_manual_events e
-      where e.start_at < v_end + interval '30 minutes'
-        and e.end_at > v_start - interval '30 minutes'
-    ) then
-      raise exception 'Der gewünschte Start kollidiert mit einem blockierten Kalendereintrag.';
-    end if;
+    -- Jeder Arbeitstag erhält höchstens acht Stunden; der erste beginnt exakt zur gewählten Abgabezeit.
+    while v_remaining > 0 loop
+      if not v_first_day then
+        while extract(isodow from v_day) in (6,7) loop v_day := v_day + 1; end loop;
+        v_start := (v_day + time '08:00') at time zone 'Europe/Berlin';
+      else
+        v_start := (v_day + v_requested_time) at time zone 'Europe/Berlin';
+      end if;
 
-    insert into public.request_booking_blocks(request_id,booking_start,booking_end)
-    values(p_request_id,v_start,v_end);
+      v_segment_hours := least(v_remaining, 8);
+      v_end := v_start + (v_segment_hours::double precision * interval '1 hour');
+
+      if exists (
+        select 1 from public.request_booking_blocks b
+        where b.request_id <> p_request_id
+          and b.booking_start < v_end + interval '30 minutes'
+          and b.booking_end > v_start - interval '30 minutes'
+      ) then
+        raise exception 'Der gewünschte Start kollidiert mit einem anderen Auftrag. Bitte einen anderen Startzeitpunkt wählen.';
+      end if;
+      if exists (
+        select 1 from public.personal_calendar_events e
+        where e.blocks_customer_bookings = true
+          and e.title is distinct from v_marker
+          and e.start_time < v_end + interval '30 minutes'
+          and e.end_time > v_start - interval '30 minutes'
+      ) then
+        raise exception 'Der gewünschte Start kollidiert mit einer Schicht oder einem persönlichen Kalendereintrag.';
+      end if;
+      if exists (
+        select 1 from public.calendar_manual_events e
+        where e.start_at < v_end + interval '30 minutes'
+          and e.end_at > v_start - interval '30 minutes'
+      ) then
+        raise exception 'Der gewünschte Start kollidiert mit einem blockierten Kalendereintrag.';
+      end if;
+
+      insert into public.request_booking_blocks(request_id,booking_start,booking_end)
+      values(p_request_id,v_start,v_end);
+
+      v_remaining := v_remaining - v_segment_hours;
+      if v_remaining > 0 then
+        v_day := v_day + 1;
+        v_first_day := false;
+      end if;
+    end loop;
     return;
   end if;
 
@@ -166,7 +190,6 @@ begin
 
   while v_remaining > 0 loop
     while extract(isodow from v_day) in (6,7) loop v_day := v_day + 1; end loop;
-
     if v_remaining >= 8 then
       v_start := (v_day + time '08:00') at time zone 'Europe/Berlin';
       v_end := (v_day + time '16:00') at time zone 'Europe/Berlin';
