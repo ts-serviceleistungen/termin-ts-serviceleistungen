@@ -1544,14 +1544,14 @@ async function buildInvoicePdf(inv,items){
       doc.setFont('helvetica','normal');doc.setFontSize(6.4);
       text(sellerStreet,left,278);text(sellerPlace,left,283);text('Deutschland',left,288);
       doc.setFont('helvetica','bold');doc.setFontSize(6.5);
-      text('KONTAKT',63,273);text('STEUERDATEN',105,273);text('BANK '+bankName.toUpperCase(),148,273);
+      text('KONTAKT',63,273);text('STEUERDATEN',105,273);text('B A N K '+bankName.toUpperCase(),148,273);
       doc.setFont('helvetica','normal');doc.setFontSize(6.0);
-      text('TEL. '+sellerPhone,63,278);
-      const emailLines=doc.splitTextToSize('E-MAIL '+sellerEmail,38);doc.text(emailLines,63,283);
-      text('STEUER-NR. '+taxNumber,105,278);
+      text('T E L . '+sellerPhone.replaceAll('/',''),63,278);
+      const emailLines=doc.splitTextToSize('E - M A I L '+sellerEmail,38);doc.text(emailLines,63,283);
+      text('S T E U E R - N R . '+taxNumber,105,278);
       text('INHABER/-IN',105,283);text('Thomas Schwetz',105,288);
-      text('IBAN '+iban,148,278);
-      text('BIC '+bic,148,283);
+      text('I B A N '+iban,148,278);
+      text('B I C '+bic,148,283);
       doc.setTextColor(...black);doc.setFontSize(7);
       text(p+'/'+pages,right,290,{align:'right'});
     }
