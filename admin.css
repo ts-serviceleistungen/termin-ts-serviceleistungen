@@ -253,3 +253,5 @@ input,select,textarea{width:100%;margin-top:6px;border:1px solid #d9d3c7;backgro
 .invoice-payment-card .modal-head p{margin:4px 0 0;color:#777;font-size:13px}
 .invoice-payment-card form{display:grid;gap:14px}
 .invoice-payment-card .field-grid{margin:0}
+
+.invoice-email-history{margin-top:12px;padding-top:9px;border-top:1px solid #e7e1d7;color:#746b5d}.invoice-email-history small{font-size:12px;line-height:1.5}
