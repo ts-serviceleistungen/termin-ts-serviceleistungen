@@ -43,6 +43,11 @@ if (loginForm) {
   });
 }
 const logoutBtn = document.getElementById('logout');
+const adminSidebar = document.getElementById('adminSidebar');
+const sidebarToggle = document.getElementById('sidebarToggle');
+const sidebarClose = document.getElementById('sidebarClose');
+const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+const sidebarUser = document.getElementById('sidebarUser');
 const refreshBtn = document.getElementById('refresh');
 const listEl = document.getElementById('list');
 const userEl = document.getElementById('user');
@@ -224,7 +229,7 @@ let currentReceiptTotal=null;
 function escapeHtml(value){return String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;')}
 function formatDate(value){if(!value)return '—';const d=new Date(value+'T00:00:00');return Number.isNaN(d.getTime())?value:d.toLocaleDateString('de-DE')}
 function showLoginMessage(message){loginMsg.textContent=message;loginMsg.classList.remove('hidden')}
-async function init(){const {data,error}=await db.auth.getSession();if(error){showLoginMessage(error.message);return}const session=data.session;if(!session){loginEl.classList.remove('hidden');dashEl.classList.add('hidden');return}loginEl.classList.add('hidden');dashEl.classList.remove('hidden');if(userEl) userEl.textContent=session.user.email||'';showView('dashboard');await load();await loadReceipts();await loadFinancials();await loadInvoices();await loadOffers(false)}
+async function init(){const {data,error}=await db.auth.getSession();if(error){showLoginMessage(error.message);return}const session=data.session;if(!session){loginEl.classList.remove('hidden');dashEl.classList.add('hidden');return}loginEl.classList.add('hidden');dashEl.classList.remove('hidden');if(userEl) userEl.textContent=session.user.email||'';if(sidebarUser)sidebarUser.textContent=session.user.email||'';showView('dashboard');await load();await loadReceipts();await loadFinancials();await loadInvoices();await loadOffers(false)}
 async function load(){
   listEl.innerHTML='<p>Aktualisiere Anfragen...</p>';
   const {data,error}=await db.from('requests').select('*').order('created_at',{ascending:false});
@@ -1993,6 +1998,8 @@ function showView(view){
   if(customersView)customersView.classList.toggle('hidden',view!=='customers');
   if(existingCustomersView)existingCustomersView.classList.toggle('hidden',view!=='existingCustomers');
   document.querySelectorAll('[data-back-dashboard]').forEach(btn=>btn.classList.toggle('hidden',view==='dashboard'));
+  document.querySelectorAll('[data-nav]').forEach(btn=>btn.classList.toggle('active',btn.dataset.nav===view));
+  if(window.matchMedia('(max-width: 800px)').matches)closeAdminSidebar();
 
   if(pageTitle && view==='dashboard')pageTitle.textContent='Dashboard';
   if(pageTitle && view==='requests')pageTitle.textContent='Terminanfragen';
@@ -2021,6 +2028,28 @@ document.querySelectorAll('[data-nav]').forEach(btn=>{
     window.scrollTo({top:0,behavior:'smooth'});
   });
 });
+
+function openAdminSidebar(){
+  adminSidebar?.classList.add('is-open');
+  sidebarBackdrop?.classList.add('is-visible');
+  sidebarToggle?.setAttribute('aria-expanded','true');
+}
+function closeAdminSidebar(){
+  adminSidebar?.classList.remove('is-open');
+  sidebarBackdrop?.classList.remove('is-visible');
+  sidebarToggle?.setAttribute('aria-expanded','false');
+}
+sidebarToggle?.addEventListener('click',()=>{
+  if(window.matchMedia('(max-width: 800px)').matches){
+    adminSidebar?.classList.contains('is-open')?closeAdminSidebar():openAdminSidebar();
+  }else{
+    document.getElementById('dash')?.classList.toggle('sidebar-collapsed');
+    sidebarToggle.setAttribute('aria-expanded',String(!document.getElementById('dash')?.classList.contains('sidebar-collapsed')));
+  }
+});
+sidebarClose?.addEventListener('click',closeAdminSidebar);
+sidebarBackdrop?.addEventListener('click',closeAdminSidebar);
+
 
 document.querySelectorAll('[data-back-dashboard]').forEach(btn=>btn.addEventListener('click',()=>{showView('dashboard');window.scrollTo({top:0,behavior:'smooth'});}));
 
