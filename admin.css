@@ -248,3 +248,8 @@ input,select,textarea{width:100%;margin-top:6px;border:1px solid #d9d3c7;backgro
 .invoice-preview-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;padding:12px 16px;background:#fff;border-top:1px solid #e5e0d5}
 .invoice-preview-actions button{min-height:42px}
 @media(max-width:650px){.invoice-preview-modal{padding:0}.invoice-preview-dialog{height:100dvh;border-radius:0}.invoice-preview-header{padding:10px 12px}.invoice-preview-header h2{font-size:18px}.invoice-preview-hint{display:none}.invoice-preview-actions{justify-content:stretch;padding:8px;gap:6px}.invoice-preview-actions button{flex:1 1 42%;font-size:12px;padding:9px 7px}}
+
+.invoice-payment-card{max-width:650px;width:calc(100% - 24px);max-height:92vh;overflow:auto}
+.invoice-payment-card .modal-head p{margin:4px 0 0;color:#777;font-size:13px}
+.invoice-payment-card form{display:grid;gap:14px}
+.invoice-payment-card .field-grid{margin:0}
