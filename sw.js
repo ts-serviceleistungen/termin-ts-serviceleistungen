@@ -1,4 +1,4 @@
-const CACHE = 'ts-serviceleistungen-pwa-v20261111-assets-2';
+const CACHE = 'ts-serviceleistungen-pwa-v20261111-sidebar-3';
 const SHELL = [
   './',
   './index.html',
