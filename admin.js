@@ -1269,7 +1269,7 @@ async function loadIssuedInvoices(){
   if(!issuedInvoiceList)return;
   issuedInvoiceList.innerHTML='<p>Neue Rechnungen werden geladen…</p>';
   try{
-    const {data,error}=await db.from('issued_invoices').select('*,invoice_items(*),invoice_payments(*)').order('created_at',{ascending:false});
+    const {data,error}=await db.from('issued_invoices').select('*,invoice_items(*),invoice_payments(*),invoice_documents(*)').order('created_at',{ascending:false});
     if(error)throw error;
     currentIssuedInvoices=data||[];
     renderIssuedInvoices();
@@ -1292,9 +1292,13 @@ function renderIssuedInvoices(){
     const badgeClass=inv.status==='cancelled'?'invoice-status-cancelled':inv.status==='draft'?'invoice-status-draft':paidAmount>=total?'invoice-status-paid':paidAmount>0?'invoice-status-partial':'invoice-status-open';
     const num=inv.invoice_number||'Entwurf';
     const date=inv.invoice_date?formatDate(inv.invoice_date):formatDate(String(inv.created_at||'').slice(0,10));
+    const hasPdf=(inv.invoice_documents||[]).some(d=>d.document_kind==='pdf');
+    const hasXml=(inv.invoice_documents||[]).some(d=>d.document_kind==='xrechnung_xml');
     const actions=inv.status==='draft'
       ? '<button type="button" class="gold-btn" data-invoice-issue="'+inv.id+'">Rechnung verbindlich ausstellen</button><button type="button" class="danger-btn" data-invoice-delete="'+inv.id+'">Entwurf löschen</button>'
-      : '<button type="button" class="secondary-btn" data-invoice-download="'+inv.id+'" data-kind="pdf">PDF herunterladen</button><button type="button" class="secondary-btn" data-invoice-download="'+inv.id+'" data-kind="xrechnung_xml">XRechnung XML</button>'+
+      : (hasPdf?'<button type="button" class="secondary-btn" data-invoice-download="'+inv.id+'" data-kind="pdf">PDF herunterladen</button>':'')+
+        (hasXml?'<button type="button" class="secondary-btn" data-invoice-download="'+inv.id+'" data-kind="xrechnung_xml">XRechnung XML</button>':'')+
+        '<button type="button" class="secondary-btn" data-invoice-generate-docs="'+inv.id+'">Dokumente (neu) erzeugen</button>'+
         (inv.status==='issued'?(paidAmount<=0?'<button type="button" class="danger-btn" data-invoice-cancel="'+inv.id+'">Stornieren</button>':'')+'<button type="button" class="secondary-btn" data-invoice-payment="'+inv.id+'">Zahlung erfassen</button>':'');
     return '<article class="issued-invoice-card"><div class="issued-invoice-top"><div><span class="eyebrow">'+(inv.document_type==='cancellation'?'STORNORECHNUNG':'RECHNUNG')+'</span><h3>'+escapeHtml(num)+'</h3><p>'+escapeHtml(inv.customer_company||inv.customer_name)+' · '+escapeHtml(date)+'</p></div><div class="issued-invoice-amount">'+euro(total)+'</div></div><div class="issued-invoice-meta"><span class="invoice-status '+badgeClass+'">'+paymentStatus+'</span><span>Bezahlt: '+euro(paidAmount)+'</span><span>Offen: '+euro(Math.max(0,total-paidAmount))+'</span></div><div class="issued-invoice-actions">'+actions+'</div>'+(inv.cancellation_invoice_id?'<small>Stornobeleg vorhanden.</small>':'')+'</article>';
   }).join('');
@@ -2344,7 +2348,7 @@ ordersView?.addEventListener('change',e=>{
   const amount=e.target.closest('[data-order-amount]');if(amount)saveOrderAmount(amount);
   const offer=e.target.closest('[data-order-offer]');if(offer)saveOrderOfferLink(offer);
 });
-ordersView?.addEventListener('click',e=>{const invoice=e.target.closest('[data-order-invoice]');if(invoice){showView('invoices');return openInvoiceDraftFromOrder(invoice.dataset.orderInvoice);}const del=e.target.closest('[data-order-delete]');if(del)return deleteOrder(del);const button=e.target.closest('[data-order-save]');if(button)saveOrderDetails(button)});
+ordersView?.addEventListener('click',async e=>{const invoice=e.target.closest('[data-order-invoice]');if(invoice){showView('invoices');await ensureInvoiceSources();return openInvoiceDraftFromOrder(invoice.dataset.orderInvoice);}const del=e.target.closest('[data-order-delete]');if(del)return deleteOrder(del);const button=e.target.closest('[data-order-save]');if(button)saveOrderDetails(button)});
 
 invoiceSettingsForm?.addEventListener('submit',saveInvoiceSettings);
 invoiceDraftForm?.addEventListener('submit',createInvoiceDraft);
@@ -2360,6 +2364,7 @@ issuedInvoiceList?.addEventListener('click',async e=>{
   const del=e.target.closest('[data-invoice-delete]');if(del)return deleteInvoiceDraft(del.dataset.invoiceDelete);
   const cancel=e.target.closest('[data-invoice-cancel]');if(cancel)return cancelInvoice(cancel.dataset.invoiceCancel);
   const payment=e.target.closest('[data-invoice-payment]');if(payment)return addInvoicePayment(payment.dataset.invoicePayment);
+  const regen=e.target.closest('[data-invoice-generate-docs]');if(regen){const inv=currentIssuedInvoices.find(x=>x.id===regen.dataset.invoiceGenerateDocs);if(inv){try{await createInvoiceFiles(inv);await loadIssuedInvoices();alert('Rechnungsdokumente wurden neu erzeugt.');}catch(err){alert('Dokumente konnten nicht erzeugt werden: '+err.message);}}return;}
   const download=e.target.closest('[data-invoice-download]');if(download)return downloadInvoiceDocument(download.dataset.invoiceDownload,download.dataset.kind);
 });
 offerSearch?.addEventListener('input',renderOffers);
