@@ -1605,7 +1605,7 @@ async function buildInvoicePdf(inv,items){
   y=53;
   y+=wrapped(recipient,left,y,95,9,4.5);
   if(inv.customer_name&&inv.customer_company)y+=wrapped(inv.customer_name,left,y,95,9,4.5);
-  y+=wrapped(String(inv.customer_street||'').replace(/,\\s*(\\d)/,' $1'),left,y,95,9,4.5);
+  y+=wrapped(String(inv.customer_street||'').replace(/,\s*(\d)/,' $1'),left,y,95,9,4.5);
   y+=wrapped(recipientLine,left,y,95,9,4.5);
   y+=wrapped('Deutschland',left,y,95,9,4.5);
 
@@ -2773,8 +2773,17 @@ invoiceEmailForm?.addEventListener('submit',sendInvoiceEmail);
 invoiceEmailClose?.addEventListener('click',closeInvoiceEmail);
 invoiceEmailCancel?.addEventListener('click',closeInvoiceEmail);
 invoiceEmailModal?.addEventListener('click',e=>{if(e.target===invoiceEmailModal)closeInvoiceEmail();});
-invoiceDraftForm?.addEventListener('submit',createInvoiceDraft);
-invoicePreviewBtn?.addEventListener('click',()=>createInvoiceDraft(null,{preview:true}));
+const runInvoiceDraftSafely=async(event,options={})=>{
+  try{await createInvoiceDraft(event,options);}
+  catch(error){
+    console.error('Rechnungsentwurf fehlgeschlagen:',error);
+    const message='Rechnung konnte nicht verarbeitet werden: '+(error?.message||String(error));
+    if(invoiceDraftMsg){invoiceDraftMsg.textContent=message;invoiceDraftMsg.classList.remove('hidden');}
+    alert(message);
+  }
+};
+invoiceDraftForm?.addEventListener('submit',event=>runInvoiceDraftSafely(event));
+invoicePreviewBtn?.addEventListener('click',()=>runInvoiceDraftSafely(null,{preview:true}));
 invoiceNewBtn?.addEventListener('click',async()=>{resetInvoiceDraft();invoiceDraftForm.classList.remove('hidden');invoiceSetField('invoiceServiceDate',new Date().toLocaleDateString('sv-SE'));await ensureInvoiceSources();invoiceDraftForm.scrollIntoView({behavior:'smooth',block:'start'});});
 invoiceDraftCancelBtn?.addEventListener('click',()=>invoiceDraftForm.classList.add('hidden'));
 invoicePreviewClose?.addEventListener('click',closeInvoicePreview);
