@@ -1,4 +1,4 @@
-const CACHE = 'ts-serviceleistungen-pwa-v20261111-invoice-signoff-9';
+const CACHE = 'ts-serviceleistungen-pwa-v20261124-invoice-debug-10';
 const SHELL = [
   './',
   './index.html',
